@@ -1,0 +1,15 @@
+# Local build artifacts (rebuild from source with the TC32 toolchain)
+*.o
+*.elf
+*.bin
+!*/ramp_firmware_v1.bin
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp

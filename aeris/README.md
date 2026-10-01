@@ -6,6 +6,13 @@ Adds the same autonomous, on-device temperature ramp as the Carta 2 patch, adapt
 different firmware. Aeris has no screen, so progress shows as a live color gradient across its 4
 RGB LEDs (cool blue → hot amber, based on measured temperature) instead of an on-screen graph.
 
+![Mockup of the LED progress gradient at three points in a ramp](led-mockup.png)
+
+*A rendered mockup, not a photo — nothing here has been confirmed against real LEDs. The gradient
+math matches `ramp_led.c` exactly; note the mid-ramp color renders as a muted gray-brown rather
+than something more vivid, a known property of straight-line RGB interpolation between blue and
+amber, not a bug — flagged, not yet fixed.*
+
 **Status: built and internally verified, with one honest gap the Carta 2 patch doesn't have — not
 yet installed on real hardware, and the free-flash region this patch's code lives in could not be
 independently verified at all (not "not yet," genuinely cannot be, from this dump — see below).**

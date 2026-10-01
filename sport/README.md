@@ -7,6 +7,12 @@ Carta Sport's different firmware. Like Aeris, Sport has no screen — progress s
 gradient (cool blue → hot amber, based on measured temperature) across its RGB LEDs. Sport has 5
 individually-addressable LEDs (confirmed hardware fact — Aeris has 4).
 
+![Mockup of the LED progress gradient at three points in a ramp](led-mockup.png)
+
+*A rendered mockup, not a photo — same caveats as the Aeris patch's mockup: nothing confirmed
+against real LEDs, and the mid-ramp color's muted gray-brown is a known straight-line-RGB-lerp
+property, not a bug.*
+
 **Status: built and internally verified, with the same honest gap Aeris has and Carta 2 doesn't —
 not yet installed on real hardware, and the free-flash region this patch's code lives in could not
 be independently verified at all from this firmware dump.** Read the whole page, especially

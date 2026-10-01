@@ -22,35 +22,40 @@ rushed into firmware that just finished a careful verification pass.*
 firmware's own battery readout, which this patch never touches (see "What it actually changes"
 below) and which keeps running every tick regardless of ramp state. The mockup was just missing it
 before. Its exact row position is a reasoned guess (only the real firmware's X range, `0x98`-`0xb0`,
-was recovered from the decompile — not Y), placed in the top margin the graph already leaves free.
-The number itself is drawn with a placeholder font rather than the real digit-glyph table: that
-table's bit-order was only validated against digits 1-8 by eye, and 0/9 are confirmed to render as
-garbage — exactly the two digits any battery percentage uses constantly. Covering more of the
-screen (a bigger graph, and a real dab-count readout alongside the battery one) is the next planned
-step, once the stock battery element's and surrounding elements' exact draw rectangles are
-confirmed from a fresh decompile — not done yet, so the graph's current size is left conservative
-rather than guessed at.*
+was recovered from the decompile — not Y, though y=20-36 is now confirmed via the same decompile
+pass that found the two gap sites below, since `0xdb40`'s own draw calls were read in full at the
+same time). The number itself is drawn with a placeholder font rather than the real digit-glyph
+table: that table's bit-order was only validated against digits 1-8 by eye, and 0/9 are confirmed to
+render as garbage — exactly the two digits any battery percentage uses constantly.*
 
-**Status: all five patch sites independently re-confirmed against the real firmware build below —
+*The graph itself is now noticeably bigger than earlier versions of this mockup — not a cosmetic
+tweak, but downstream of a real bug fix (see "Two more gap sites found and fixed" below): two stock
+screen elements that used to draw over part of this graph, unsuppressed, are now properly
+suppressed during a ramp, which safely freed real extra screen space this version uses. A real
+on-device dab-count readout is still not implemented — Carta 2's firmware has several unlabeled
+flash-stored counters that are plausible candidates, but none has been confirmed as a dab/usage
+counter the way Sport's equivalent has (see the research repo's firmware-architecture doc), so
+nothing's added here rather than guessed at.*
+
+**Status: all seven patch sites independently re-confirmed against the real firmware build below —
 built, verified at the byte level, not yet installed on real hardware.** This patch previously
-shipped (briefly, never flashed by anyone) with two of its five addresses silently wrong — carried
-over from an older, different firmware build without being re-checked, despite being labeled
-"confirmed." That was caught by re-verifying every single address directly against the real
-binary rather than trusting an earlier pass's label, and both are now fixed and independently
-re-confirmed the same rigorous way as the other three. The full story, including exactly how each
-one was found and fixed, is below rather than quietly smoothed over — read "How this was verified"
-if you want the details before trusting this with a device you depend on. "Verified in software"
-and "confirmed safe to flash" are still different claims, and only the second one matters once
-you're about to do it to a device you use.
+shipped (briefly, never flashed by anyone) with two of its then-five addresses silently wrong —
+carried over from an older, different firmware build without being re-checked, despite being
+labeled "confirmed." A later audit of that same shipped patch then found a second, different kind
+of gap: two real screen elements the patch never suppressed at all, quietly drawing over part of
+its own graph every tick. Both rounds are written up in full below rather than quietly smoothed
+over — read "How this was verified" if you want the details before trusting this with a device you
+depend on. "Verified in software" and "confirmed safe to flash" are still different claims, and
+only the second one matters once you're about to do it to a device you use.
 
 ## What it actually changes
 
-Five same-length call-site patches inside the stock firmware — each one replaces an existing
-4- or 8-byte instruction sequence with another one of the identical length, pointing at new code
-instead. Nothing is inserted, nothing is deleted, no other byte in the image moves. The full
-reasoning behind each design choice (why a temperature gradient instead of a user-picked color,
-why the target line is dashed, why the countdown timer and preset badge are suppressed during a
-ramp, exactly which struct offsets and functions each file relies on) is written directly into the
+Seven same-length call-site patches inside the stock firmware — each one replaces an existing
+4-byte instruction with another one of the identical length, pointing at new code instead. Nothing
+is inserted, nothing is deleted, no other byte in the image moves. The full reasoning behind each
+design choice (why a temperature gradient instead of a user-picked color, why the target line is
+dashed, why the countdown timer, preset badge, and two other screen elements are suppressed during
+a ramp, exactly which struct offsets and functions each file relies on) is written directly into the
 header comments of [`ramp_tick.c`](ramp_tick.c), [`ramp_save.c`](ramp_save.c), and
 [`ramp_display.c`](ramp_display.c) — kept there rather than in a separate doc so it can't drift out
 of sync with the code it's explaining. See
@@ -62,8 +67,10 @@ struct offset here was originally found.
 | `0x6e2e` | call to the per-tick PID/session orchestrator (`FUN_0000af2c`) | `ramp_trampoline` | Runs the original tick unmodified, then the ramp sequencer | ✅ yes — see "The PID-tick call site" below |
 | `0x11d96` | the marker-byte load immediately before the stock `0xA5`/`0xAF`/`0x66` compare chain in the `0xCC` handler's marker dispatch | `ramp_marker_entry` | Replicates that load, calls `ramp_marker_dispatch` for the 5 new waypoint-save markers (`0xB1`-`0xB5`), leaves the untouched chain right after it working exactly as before for everything else | ✅ yes — see "The marker-dispatch site" below |
 | `0xfa38` | main temp/gauge display (`FUN_0000d3c0`) | `ramp_temp_display` | Draws the progress graph while a ramp is active; falls through to the original dial otherwise | ✅ yes — independently re-disassembled against the real binary |
+| `0xfa3c` | secondary temp/gauge display (`FUN_0000dcac`) | `ramp_secondary_or_skip` | Suppressed during a ramp — one of the two gap sites, see "Two more gap sites found and fixed" below | ✅ yes |
 | `0xfa50` | session countdown timer (`FUN_0000d048`) | `ramp_countdown_or_skip` | Suppressed during a ramp — a ramp has its own per-stage timing, the session countdown doesn't apply | ✅ yes |
 | `0xfa54` | active-preset-slot badge (`FUN_0000e42c`) | `ramp_badge_or_skip` | Suppressed during a ramp, freeing that screen space for the bigger graph | ✅ yes |
+| `0xfa58` | lower-row status icon (`FUN_0000e300`) | `ramp_status_icon_or_skip` | Suppressed during a ramp — the other gap site | ✅ yes |
 
 New code lives in previously-unused flash at `0x30000` (confirmed free space ahead of the OTA
 staging area), sized well under the 4KB it has before the next sector. Waypoints are stored in
@@ -161,6 +168,43 @@ The fix was architectural, not just a corrected address: intercept the marker *l
 unconditionally before any of the three comparisons, rather than any one leaf of the chain. See
 `ramp_marker_entry.s` for exactly how that's done without disturbing the untouched stock chain
 immediately after it.
+
+**Two more gap sites found and fixed.** Both mistakes above were caught before this patch shipped
+at all. This one wasn't — it shipped first with only five patch sites, briefly, before anyone
+flashed it, and was found during a later audit rather than during the original build. A fresh
+disassembly of `FUN_0000fa1c` (the confirmed live-heating-screen refresh routine, see
+`ramp_display.c`'s header) read its real call sequence directly:
+
+```
+tjl 0xce70; tjl 0xcf58; tjl 0xd3c0; tjl 0xdcac; tjl 0xdb40;
+[one of two flags zero:] tjl 0xd048; tjl 0xe42c; tjl 0xe300;
+[else:] tjl 0xe2b4;
+```
+
+The original five-site version patched `0xd3c0`, `0xd048`, and `0xe42c` — but `0xdcac` (a second
+full gauge/digit display, confirmed by decompile to draw at roughly x=0x91-0xda, y=0x42-0x9a, which
+overlaps this patch's own graph area) and `0xe300` (a small status icon in the same row as the
+already-suppressed countdown/badge) were both still being called *unconditionally*, every tick,
+regardless of ramp state. Left as-is, real hardware would have shown `0xdcac`'s own digits drawn
+over the graph's right-hand columns, and a stray icon reappearing in a row this patch otherwise
+clears. Both are now suppressed the same way `0xd048`/`0xe42c` already were (`ramp_secondary_or_skip`,
+`ramp_status_icon_or_skip` in `ramp_display.c`), and every one of the other five patch sites'
+replacement bytes was regenerated from scratch against the rebuilt code (adding two new functions
+shifted every address after them in the injected blob) rather than assumed to still be correct —
+see `apply_patch.py`'s own comment on `PATCHES` for the full list.
+
+One related branch was deliberately **not** patched: `FUN_0000e2b4`, the `else` of that same
+`if`, is a full-width banner gated on two struct flags (`struct+0x1`/`struct+0x2` both non-zero)
+whose exact meaning wasn't re-traced against this exact build this session — an older, pre-build-
+correction note calls `struct+0x1` a session-active flag, which would make this branch's real
+trigger condition worth independently re-confirming rather than assumed. Left alone rather than
+guessed at; the only consequence if it does fire during a ramp is a cosmetic banner over the lower
+screen, since `ramp_tick.c`'s own ramp logic never reads anything `FUN_0000fa1c` touches.
+
+Fixing the dcac/e300 gap also freed enough confirmed screen space to widen the graph itself —
+`GRAPH_W`/`GRAPH_H` grew from 150x140 to 220x164 (and `TRACE_LEN` grew to match, in both
+`ramp_tick.c` and `ramp_display.c`), using most of the real free rectangle `FUN_0000fa1c`'s full
+draw sequence now confirms, rather than the original conservative guess.
 
 What none of this covers: actually running on a real device. Software verification catches "is this
 byte-accurate against what we confirmed," not "does the display look right," "does the timing feel

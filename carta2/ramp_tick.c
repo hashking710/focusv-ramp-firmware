@@ -101,17 +101,24 @@ typedef short (*rom_div_fn)(int, int);
 typedef void (*orig_fn)(void);
 #define orig_pid_tick ((orig_fn)0xaf2c)
 
-#define RAMP_MAGIC 0xA5C4   /* bumped from 0xA5C3: struct grew (trace fields) --
-                             * forces a clean re-init instead of reading stale
-                             * garbage through the new fields on first boot
-                             * after this patch replaces an older ramp build. */
+#define RAMP_MAGIC 0xA5C5   /* bumped from 0xA5C4: struct grew again (trace[]
+                             * widened 150->220, see TRACE_LEN below) -- same
+                             * reasoning as the previous bump: forces a clean
+                             * re-init instead of reading stale garbage through
+                             * the resized array on first boot after this
+                             * patch replaces an older ramp build. */
 
 /* Graph trace buffer: one byte per graph column, holding a quantized
  * measured-temperature sample. TRACE_LEN matches the plotted-area width
  * ramp_display.c actually draws (see its own header) -- keep the two in
- * sync if either changes. 150 bytes is nothing against the 32KB
- * non-retention bank this whole struct lives in. */
-#define TRACE_LEN 150
+ * sync if either changes. Widened from 150 to 220 once a display-side audit
+ * found two screen elements (FUN_0000dcac, FUN_0000e300) that the original
+ * 3-call-site patch never suppressed, silently drawing over part of the
+ * graph during a ramp -- see ramp_display.c's header for the full story.
+ * Fixing that freed enough extra screen width to make a wider trace buffer
+ * worthwhile. Still nothing against the 32KB non-retention bank this whole
+ * struct lives in. */
+#define TRACE_LEN 220
 
 typedef struct {
     u16 magic;

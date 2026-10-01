@@ -51,19 +51,18 @@ complete firmware build is the meaningful legal distinction here, not just a for
 | | Status | |
 |---|---|---|
 | **[`carta2/`](carta2/)** | ✅ software-verified, not yet hardware-verified — all five patch sites independently re-confirmed against the real binary | Has a screen — ramp progress shows as a live graph replacing the normal heating dial |
-| **[`aeris/`](aeris/)** | Blocked on further reverse-engineering — not started | No screen — ramp progress would show as an LED color gradient instead |
+| **[`aeris/`](aeris/)** | ✅ software-verified, not yet hardware-verified — see that folder's README for one honest gap this device has that Carta 2 doesn't (the injected-code flash region can't be verified from the firmware dump at all, not just "not yet") | No screen — ramp progress shows as an LED color gradient (cool blue → hot amber) across its 4 RGB LEDs |
 | **[`carta-sport/`](carta-sport/)** | Blocked on further reverse-engineering — not started | No screen — same LED-based approach as Aeris |
 
 Each device folder is self-contained: its own source, its own patch script, its own README with
 the exact build fingerprint it was verified against and step-by-step instructions. They are
 genuinely different compiled binaries with different addresses, even though all three share the
 same chip, architecture, and BLE protocol family — nothing is copy-pasted between them without
-being independently re-confirmed for that specific device's firmware. Aeris and Carta Sport
-specifically: initial research found strong material on both devices' button/LED/struct layout,
-but it also surfaced that the equivalent of the Carta 2 patch's core call site (where the
-per-tick control routine gets invoked) isn't confirmed for either device yet — same category of
-gap that's being fixed for Carta 2 first. Nothing gets written for either device until that's
-closed the same rigorous way.
+being independently re-confirmed for that specific device's firmware. Carta Sport: initial
+research found strong material on its button/LED/struct layout, but it also surfaced that the
+equivalent of the per-tick call site isn't confirmed yet — same category of gap that's already
+been closed for both Carta 2 and Aeris. Nothing gets written for it until that's closed the same
+rigorous way.
 
 ## How to flash it
 

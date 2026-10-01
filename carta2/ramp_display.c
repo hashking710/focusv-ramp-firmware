@@ -2,20 +2,47 @@
  *
  * While a hardware ramp is running, replaces the Carta 2's normal
  * live-heating screen elements with a target-vs-measured temperature
- * graph, instead of the usual single-number dial. Three stock functions
+ * graph, instead of the usual single-number dial. Five stock functions
  * get call-site-swapped for thin wrappers here (same technique as the
  * rest of this patch -- same-length replacement, no insertion, originals
  * left completely untouched and still called in the non-ramp case):
  *
- *   - FUN_0000d3c0 (main temp+gauge number)   -> ramp_temp_display
- *   - FUN_0000d048 (session countdown timer)  -> ramp_countdown_or_skip
- *   - FUN_0000e42c (active-preset-slot badge) -> ramp_badge_or_skip
+ *   - FUN_0000d3c0 (main temp+gauge number)       -> ramp_temp_display
+ *   - FUN_0000dcac (secondary temp+gauge number)  -> ramp_secondary_or_skip
+ *   - FUN_0000d048 (session countdown timer)      -> ramp_countdown_or_skip
+ *   - FUN_0000e42c (active-preset-slot badge)     -> ramp_badge_or_skip
+ *   - FUN_0000e300 (lower-row status icon)        -> ramp_status_icon_or_skip
  *
- * All three patch sites live inside FUN_0000fa1c, the confirmed
+ * All five patch sites live inside FUN_0000fa1c, the confirmed
  * live-heating-screen refresh routine (see firmware-analysis-notes.md,
  * "the entire live-heating status bar decoded"). FUN_0000cf58/0xce70
  * (the small target-temperature readouts) and FUN_0000db40 (battery) are
  * left completely alone -- both stay meaningful during a ramp.
+ *
+ * ⚠ Corrected gap (found during a later audit of this already-shipped
+ * patch, before any hardware testing happened -- caught here, not on a
+ * real device): the original version of this file only patched d3c0,
+ * d048 and e42c. A fresh disassembly of FUN_0000fa1c's real call sequence
+ * --
+ *   tjl 0xce70; tjl 0xcf58; tjl 0xd3c0; tjl 0xdcac; tjl 0xdb40;
+ *   [if one of two flags is zero:] tjl 0xd048; tjl 0xe42c; tjl 0xe300;
+ *   [else:] tjl 0xe2b4;
+ * -- showed two more screen elements in that same unconditional sequence
+ * that the 3-site version never touched: FUN_0000dcac (a second full
+ * gauge/digit display, side-by-side with d3c0, confirmed by decompile to
+ * draw at x=0x91-0xda/y=0x42-0x9a -- overlapping this patch's own graph
+ * area) and FUN_0000e300 (a small status icon at y=0xc1-0xdd, in the same
+ * row as the countdown/badge this patch already suppresses). Both kept
+ * running, unconditionally, every tick, regardless of ramp state --
+ * meaning on real hardware the graph's right-hand columns would have had
+ * dcac's own digits drawn over them, and a stray icon would have kept
+ * appearing in the countdown row after it was otherwise cleared. Fixed by
+ * adding the same suppress-or-call-original wrapper pattern already used
+ * for d048/e42c. See the "What's confirmed, what's reasoned" section in
+ * the README for the one related branch (FUN_0000e2b4, a mutually
+ * exclusive full-width banner gated on two struct flags whose exact
+ * meaning wasn't re-traced this session) that's deliberately left alone
+ * and flagged rather than guessed at.
  *
  * Design choices worth recording (not just the "what", the "why"):
  *
@@ -59,14 +86,15 @@
  *   pixels for no reason. The static frame (axes + target line) draws
  *   once per ramp run; after that, only newly-sampled trace columns get
  *   painted, tracked via graph_drawn_col in the shared RAM state.
- * - No BLE/preset-rank badge during a ramp -- FUN_0000e42c is skipped
- *   entirely (not repurposed) rather than fed a substitute rank value.
- *   Freed that whole screen region for a bigger graph instead, and this
- *   file draws its own compact single-digit stage indicator in a
- *   deliberately out-of-the-way spot (bottom-left, below the graph),
- *   using the same confirmed digit-glyph table FUN_0000ce70/0xcf58 use --
- *   full control over placement instead of inheriting wherever 0xe42c's
- *   own jump-table handlers happened to draw.
+ * - No BLE/preset-rank badge, countdown, secondary gauge, or status icon
+ *   during a ramp -- FUN_0000e42c/0xd048/0xdcac/0xe300 are all skipped
+ *   entirely (not repurposed) rather than fed substitute values. Freed
+ *   that whole screen region for a bigger graph instead, and this file
+ *   draws its own compact single-digit stage indicator in a deliberately
+ *   out-of-the-way spot (bottom-left corner of the graph itself), using
+ *   the same confirmed digit-glyph table FUN_0000ce70/0xcf58 use -- full
+ *   control over placement instead of inheriting wherever any of those
+ *   four functions' own drawing happened to land.
  *
  * Confirmed facts this relies on, all from direct decompile this session:
  *   - FUN_0000d048 is unambiguously the countdown timer -- its digit
@@ -86,12 +114,42 @@
  *     FUN_0000ce70/0xcf58 use, 0x22 (34) bytes per glyph, drawn as a
  *     9x16 box (confirmed from their own call sites' w/h arguments).
  *     Reused here as-is for the stage digit -- same table, same size.
+ *   - FUN_0000dcac is structurally parallel to FUN_0000d3c0 (same
+ *     value*0x28/table-lookup gauge math, its own glyph tables) but at a
+ *     different screen position -- confirmed via direct decompile and
+ *     disassembly of its call site inside FUN_0000fa1c (0xfa3c, right
+ *     after d3c0's at 0xfa38 and right before db40's at 0xfa40).
+ *   - FUN_0000e300 draws a small icon, position selected from a lookup
+ *     table rather than a literal (exact x not pinned down, y=0xc1-0xdd
+ *     is), called unconditionally alongside d048/e42c inside the same
+ *     `if` branch of FUN_0000fa1c -- confirmed via decompile and via its
+ *     call site at 0xfa58 (immediately after e42c's at 0xfa54).
+ *   - FUN_0000e2b4 is the `else` of that same branch (full-width banner,
+ *     x=0x1a-0xd4,y=0xc1-0xe0) -- gated on struct+0x1/struct+0x2 both
+ *     being non-zero. What those two flags actually mean wasn't
+ *     re-traced this session (an old, pre-PROD-111224 note calls
+ *     struct+0x1 a session-active flag, which would make this branch's
+ *     real trigger condition unclear without fresh confirmation against
+ *     this exact build -- the same "don't trust a carried-over address
+ *     without re-checking it" discipline this whole project runs on).
+ *     Deliberately left unpatched and undecided rather than guessed at;
+ *     if it does trigger during a ramp, the only consequence is a
+ *     cosmetic banner over the lower screen -- ramp_tick.c's own logic
+ *     doesn't read anything FUN_0000fa1c touches, so this can't affect
+ *     whether the ramp itself runs correctly.
  *
- * Screen geometry: GRAPH_* below assumes the area vacated by the
- * countdown/badge row (roughly y=190-238) is now free in addition to the
- * main dial's old area (y=52-190ish), inferred from FUN_0000d048's and
- * FUN_0000e42c's own draw coordinates, not independently measured
- * against a real device. Treat as a first guess to refine on hardware.
+ * Screen geometry: GRAPH_* below now comes directly from decompiling every
+ * element FUN_0000fa1c draws, not inference from a couple of call sites --
+ * real (x,y,w,h) arguments for ce70 (x=6-56,y=20-36), cf58 (x=68-112,
+ * y=20-36), db40/battery (x=152-233,y=20-36), d3c0 (roughly x=11-112,
+ * y=66-168), dcac (roughly x=126-218,y=66-168), and the countdown/badge/
+ * e300 row (roughly y=193-224) are all now confirmed, not guessed. That
+ * leaves one contiguous free rectangle during a ramp (status row at
+ * y=20-36 excluded, everything else in the five suppressed/replaced
+ * elements' footprint included): roughly x=10-230, y=40-222. GRAPH_* below
+ * uses a conservative margin inside that rectangle, not its full extent --
+ * still not independently measured against a real device (no way to yet),
+ * but now anchored to confirmed draw rectangles instead of a first guess.
  *
  * Colours (COLOR_* below) are otherwise-placeholder RGB565 values --
  * there's been no way to see any of this on a real screen yet. The
@@ -112,8 +170,8 @@ typedef unsigned int   u32;
 #define RAMP_NUM_SLOTS      5
 #define RAMP_SLOT_SIZE      4
 
-#define RAMP_MAGIC          0xA5C4
-#define TRACE_LEN           150     /* must match ramp_tick.c's TRACE_LEN */
+#define RAMP_MAGIC          0xA5C5
+#define TRACE_LEN           220     /* must match ramp_tick.c's TRACE_LEN */
 #define TRACE_TEMP_BIAS     200     /* must match ramp_tick.c's bias */
 
 /* Mirrors ramp_tick.c's ramp_state_t exactly -- two translation units,
@@ -138,7 +196,9 @@ typedef short (*rom_div_fn)(int, int);
 
 typedef void (*orig_fn)(void);
 #define orig_temp_display ((orig_fn)0xd3c0)
+#define orig_secondary    ((orig_fn)0xdcac)
 #define orig_countdown    ((orig_fn)0xd048)
+#define orig_status_icon  ((orig_fn)0xe300)
 
 typedef void (*fill_rect_fn)(u8 x, u8 y, u8 w, u8 h, u8 color_hi, u8 color_lo);
 #define fill_rect ((fill_rect_fn)0x74d0)
@@ -153,16 +213,29 @@ typedef void (*blit_glyph_fn)(u8 x, u8 y, u8 w, u8 h, u8 color_hi, u8 color_lo,
 #define DIGIT_W           9
 #define DIGIT_H           0x10
 
-/* Graph area, expanded to use the space the countdown/badge row used to
- * occupy (both suppressed during a ramp -- see header). */
-#define GRAPH_X0   20
-#define GRAPH_Y0   50
+/* Graph area, now sized against the real confirmed free rectangle (see
+ * header's "Screen geometry" note) instead of the original conservative
+ * guess: y=42-206 (below the y=20-36 status row, above the screen's bottom
+ * margin) and x=10-230 (both d3c0's and dcac's old combined footprint, now
+ * that dcac is suppressed too). TRACE_LEN widened from 150 to 220 to match
+ * (see ramp_tick.c) -- GRAPH_W stays tied 1:1 to TRACE_LEN rather than
+ * introducing a column->pixel scale factor, same "simplest possible X
+ * mapping" reasoning as the original version. */
+#define GRAPH_X0   10
+#define GRAPH_Y0   42
 #define GRAPH_W    TRACE_LEN   /* one pixel per trace column -- simplest
                                  * possible X mapping, no scaling needed */
-#define GRAPH_H    140
+#define GRAPH_H    164
 
-#define STAGE_X    GRAPH_X0
-#define STAGE_Y    (GRAPH_Y0 + GRAPH_H + 10)
+/* Stage badge inset into the graph's own bottom-left corner rather than
+ * placed below it -- there's no longer spare vertical room below the graph
+ * once GRAPH_H uses most of the confirmed free rectangle's height, so this
+ * draws over the graph's own oldest (leftmost, already-superseded) trace
+ * columns instead. 28 = this badge's own height (DIGIT_H + 2*STAGE_BADGE_PAD
+ * = 16+8=24) plus a 4px bottom inset; computed by hand since STAGE_BADGE_H
+ * isn't defined until closer to where it's used below. */
+#define STAGE_X    (GRAPH_X0 + 6)
+#define STAGE_Y    (GRAPH_Y0 + GRAPH_H - 28)
 
 #define LINE_THICKNESS   2
 #define TARGET_THICKNESS 1   /* thinner than the live trace -- reinforces
@@ -477,7 +550,7 @@ static void ramp_graph_draw(volatile ramp_state_t *st)
     draw_stage_digit(st);
 }
 
-/* ---- the three call-site replacements ---- */
+/* ---- the five call-site replacements ---- */
 
 void ramp_temp_display(void)
 {
@@ -487,6 +560,18 @@ void ramp_temp_display(void)
     } else {
         orig_temp_display();
     }
+}
+
+void ramp_secondary_or_skip(void)
+{
+    volatile ramp_state_t *st = RAMP_STATE;
+    if (ramp_is_active(st)) {
+        return;   /* this is the gap a later audit caught (see file header):
+                   * FUN_0000dcac draws its own gauge at x=0x91-0xda, right
+                   * on top of this graph's right-hand columns, if left
+                   * running unconditionally during a ramp. */
+    }
+    orig_secondary();
 }
 
 void ramp_countdown_or_skip(void)
@@ -507,4 +592,16 @@ void ramp_badge_or_skip(void)
                    * space goes to the bigger graph instead (see header) */
     }
     ((orig_fn)0xe42c)();
+}
+
+void ramp_status_icon_or_skip(void)
+{
+    volatile ramp_state_t *st = RAMP_STATE;
+    if (ramp_is_active(st)) {
+        return;   /* the other half of the gap the dcac fix above caught --
+                   * FUN_0000e300 draws an icon in the countdown/badge row
+                   * (y=0xc1-0xdd) unconditionally alongside them; suppressed
+                   * the same way now that that row is graph space. */
+    }
+    orig_status_icon();
 }

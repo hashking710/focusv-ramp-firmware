@@ -18,6 +18,19 @@ than a vivid color — a known property of straight-line RGB interpolation betwe
 not a bug, just not yet addressed. A multi-stop gradient would fix it; flagged here rather than
 rushed into firmware that just finished a careful verification pass.*
 
+*The battery percentage (top right) isn't a new addition — it's `FUN_0000db40`, the stock
+firmware's own battery readout, which this patch never touches (see "What it actually changes"
+below) and which keeps running every tick regardless of ramp state. The mockup was just missing it
+before. Its exact row position is a reasoned guess (only the real firmware's X range, `0x98`-`0xb0`,
+was recovered from the decompile — not Y), placed in the top margin the graph already leaves free.
+The number itself is drawn with a placeholder font rather than the real digit-glyph table: that
+table's bit-order was only validated against digits 1-8 by eye, and 0/9 are confirmed to render as
+garbage — exactly the two digits any battery percentage uses constantly. Covering more of the
+screen (a bigger graph, and a real dab-count readout alongside the battery one) is the next planned
+step, once the stock battery element's and surrounding elements' exact draw rectangles are
+confirmed from a fresh decompile — not done yet, so the graph's current size is left conservative
+rather than guessed at.*
+
 **Status: all five patch sites independently re-confirmed against the real firmware build below —
 built, verified at the byte level, not yet installed on real hardware.** This patch previously
 shipped (briefly, never flashed by anyone) with two of its five addresses silently wrong — carried

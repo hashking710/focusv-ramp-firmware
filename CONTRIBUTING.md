@@ -16,8 +16,9 @@ wrong doc page, it risks leaving someone's device unresponsive.
 - **A port to a different firmware build** than the one a given device folder currently targets —
   as its own addition (a new build-fingerprint section with its own addresses), not a replacement
   of the existing one, since different builds need independently-confirmed addresses.
-- **The Aeris and Carta Sport patches themselves**, once their blocking research gaps (see each
-  folder, once they exist) are closed.
+- **Closing a "reasoned, not single-instruction-confirmed" gap** — each device README calls these
+  out specifically (e.g. the live PID target field on Aeris/Sport). Turning one of these into a
+  fully-traced, single-instruction-confirmed fact is a welcome, scoped contribution on its own.
 
 ## Verification bar for any PR that changes what a patch sends to a device
 
@@ -40,10 +41,12 @@ exactly how a wrong address ends up in a merged patch:
 
 ## Looking for something to work on?
 
-Each device folder's README documents what's confirmed and what's still open for that device
-specifically. For Aeris and Carta Sport, the blocking gaps (as of this repo's creation) are the
-per-tick control-routine call site and a verified-not-just-inferred free flash region for injected
-code — see the main README's devices table for the current state of each.
+All three devices (Carta 2, Aeris, Carta Sport) have a complete, software-verified patch — real
+hardware access is now the main thing this project needs, not more static analysis. Each device
+folder's README documents exactly what's confirmed vs. reasoned-from-converging-facts vs.
+genuinely unverifiable-from-the-dump for that device specifically; the "reasoned" and
+"unverifiable" items are the most useful things to go close if you have hardware and Ghidra access,
+and real-hardware test reports are useful even without touching any code at all.
 
 ## Code of conduct
 

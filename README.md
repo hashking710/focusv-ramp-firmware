@@ -48,21 +48,43 @@ complete firmware build is the meaningful legal distinction here, not just a for
 
 ## Devices
 
-| | Status | |
+All three are now built and software-verified, to the same bar, each independently — not one
+patch copy-pasted and relabeled. Every one of them turned up at least one real, build-specific
+surprise along the way (see each README's "What's confirmed, what's reasoned, what's
+unverifiable" section for the specifics); none of that was skipped or smoothed over to get here.
+
+| | Status | Progress shown as |
 |---|---|---|
-| **[`carta2/`](carta2/)** | ✅ software-verified, not yet hardware-verified — all five patch sites independently re-confirmed against the real binary | Has a screen — ramp progress shows as a live graph replacing the normal heating dial |
-| **[`aeris/`](aeris/)** | ✅ software-verified, not yet hardware-verified — see that folder's README for one honest gap this device has that Carta 2 doesn't (the injected-code flash region can't be verified from the firmware dump at all, not just "not yet") | No screen — ramp progress shows as an LED color gradient (cool blue → hot amber) across its 4 RGB LEDs |
-| **[`carta-sport/`](carta-sport/)** | Blocked on further reverse-engineering — not started | No screen — same LED-based approach as Aeris |
+| **[`carta2/`](carta2/)** | ✅ software-verified, not yet hardware-verified | Has a screen — a live graph replacing the normal heating dial |
+| **[`aeris/`](aeris/)** | ✅ software-verified, not yet hardware-verified | No screen — a cool-blue-to-hot-amber color gradient across its 4 RGB LEDs |
+| **[`sport/`](sport/)** | ✅ software-verified, not yet hardware-verified | No screen — same LED gradient approach, across its 5 RGB LEDs |
 
 Each device folder is self-contained: its own source, its own patch script, its own README with
 the exact build fingerprint it was verified against and step-by-step instructions. They are
-genuinely different compiled binaries with different addresses, even though all three share the
-same chip, architecture, and BLE protocol family — nothing is copy-pasted between them without
-being independently re-confirmed for that specific device's firmware. Carta Sport: initial
-research found strong material on its button/LED/struct layout, but it also surfaced that the
-equivalent of the per-tick call site isn't confirmed yet — same category of gap that's already
-been closed for both Carta 2 and Aeris. Nothing gets written for it until that's closed the same
-rigorous way.
+genuinely different compiled binaries with different addresses — in two cases, addresses that
+looked like they should carry over from a sibling device and genuinely didn't (see "Devices are
+not interchangeable" below). Nothing is copy-pasted between them without being independently
+re-confirmed for that specific device's firmware.
+
+### Devices are not interchangeable — real mistakes this caught
+
+Worth being explicit about, since the three patches share obviously-similar source: at no point
+was an address or assumption carried from one device's patch into another's without being
+independently re-checked, and that discipline caught real problems before anything shipped wrong:
+
+- **Carta 2**: an early draft had two of its five addresses silently wrong — carried over from a
+  different, older firmware build. Caught by re-verifying every address directly against the
+  actual target binary instead of trusting an earlier pass's "confirmed" label.
+- **Aeris**: the flash read/erase/write primitives are at completely different addresses than
+  Carta 2's. Checked and confirmed absent before writing any code that might have assumed
+  otherwise.
+- **Carta Sport**: the ROM divide helper lives at a different address than *both* other devices'
+  (`0x1529c`, not `0x1ac`) — confirmed absent at the other devices' address before relying on it.
+  Also has a genuinely different LED-driver gate architecture than Aeris's, confirmed by reading
+  both rather than assumed identical because the surrounding code looks the same.
+
+None of these were caught by luck — each came from deliberately re-deriving the fact in question
+against that specific binary, rather than reusing what worked last time.
 
 ## How to flash it
 
@@ -112,9 +134,10 @@ wrong.
 
 ## Contributing
 
-PRs very welcome, especially: real-hardware confirmation (does it work, does it look right, what
-needed adjusting), ports to firmware builds other than the ones already confirmed, and the Aeris /
-Carta Sport patches themselves if you get there first. If you're changing what a patch actually
-sends to the device, please verify it the same way the existing patches were (byte-level checks
-before and after, independently re-disassembled targets) rather than just "it compiled" — getting
-this wrong risks leaving a real device unresponsive.
+All three devices now have a complete, software-verified patch — what's actually needed next is
+**real-hardware confirmation**: does it work, does the LED color/graph look right, does anything
+need adjusting from what the source predicted. That's the single most valuable thing a PR could
+bring right now. Also welcome: ports to firmware builds other than the ones already confirmed. If
+you're changing what a patch actually sends to the device, please verify it the same way the
+existing patches were (byte-level checks before and after, independently re-disassembled targets)
+rather than just "it compiled" — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full bar.

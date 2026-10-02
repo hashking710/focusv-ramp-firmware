@@ -59,6 +59,8 @@
 
 #define DEV_RAMP_STATE      0x848000
 
+#define RAMP_TRACE_LEN      1   /* no screen on this device; the chart trace array is unused */
+
 #define DEV_MAX_F           600      /* official app's concentrate ceiling */
 
 struct ramp_state_s;

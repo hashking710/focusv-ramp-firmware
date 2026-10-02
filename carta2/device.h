@@ -52,6 +52,8 @@
 
 #define DEV_RAMP_STATE      0x848000
 
+#define RAMP_TRACE_LEN      210   /* the ramp chart width in columns (ramp_display.c) */
+
 #define DEV_MAX_F           635      /* official app's concentrate ceiling */
 
 #define DEV_AFTER_TICK(st)  ((void)0)   /* the screen draws from its own hooks */

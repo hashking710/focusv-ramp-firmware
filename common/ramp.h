@@ -135,9 +135,6 @@ typedef void (*flash_write_fn)(int addr, int len, void *buf);
 /* ---- dab counting threshold ---------------------------------------------- */
 #define COUNT_AT_STAGE 3
 
-/* Carta 2 chart width in columns (see carta2/ramp_display.c) */
-#define RAMP_TRACE_LEN 210
-
 /* ---- runtime state (non-retention SRAM; magic-checked, never trusted at
  * power-on) ------------------------------------------------------------------ */
 typedef struct {
@@ -153,7 +150,6 @@ typedef struct {
     u8  counted;      /* stock completion bookkeeping already run this session */
     u8  arm_failed;   /* this session's sentinel found no usable store */
     u8  frame_drawn;  /* display bookkeeping (Carta 2 screen) */
-    u8  drawn_stage;
     u8  drawn_fill;
     u8  drawn_meas_y;
     u8  drawn_batt;

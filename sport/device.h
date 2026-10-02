@@ -17,6 +17,14 @@
  *                 uses all three
  *   0x1529c       hardware divider, quotient (the same 1/2/0 entry table the
  *                 other two devices have at 0x1ac)
+ * 0xCC handler (traced, 0xaf2e-0xb002): packet at r7+0x28, big-endian, never
+ *                 clamped. C branch: flower/conc C -> +0x3c/+0x54, F = floor(
+ *                 9c/5)+32 -> +0x30/+0x48. F branch (0xb706): F -> +0x30/+0x48,
+ *                 C = floor(5(f-32)/9) -> +0x3c/+0x54 (150 F -> 65 C). Holds ->
+ *                 +0x60/+0x6c, ranks -> +0x07/+0x08 -- the custom (rank 0) slot.
+ *                 The marker (byte 13, read at 0xb002 = the hook) is only acted
+ *                 on while UI state 0x842694+3 is 1 (the awake screen) or 8;
+ *                 otherwise dropped without a reply (the app wakes it first).
  * Single click during a session already stops it in stock (consumer 0x45cc,
  * state 1: event 11 -> 0x6a98 unconditionally, events 7 / 15 / 19 -> 0x6a98
  * while heating), so, like the Aeris, no button hook.

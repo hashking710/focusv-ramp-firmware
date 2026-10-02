@@ -1,8 +1,28 @@
 # focusv-ramp-firmware
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![Status: active, not yet hardware-verified](https://img.shields.io/badge/status-active%2C%20not%20yet%20hardware--verified-yellow.svg)
+![Status: DO NOT FLASH](https://img.shields.io/badge/status-DO%20NOT%20FLASH-red.svg)
 ![Not affiliated with Focus V](https://img.shields.io/badge/affiliation-independent%2C%20unofficial-lightgrey.svg)
+
+> [!CAUTION]
+> **Do not flash any patch in this repository.** An audit found a bug class in all three patches
+> (Carta 2, Aeris, Carta Sport) that would very likely crash the device on its first tick after
+> booting and leave it in a reset loop that can't be recovered over Bluetooth — recovery would need
+> SWire hardware.
+>
+> **What's wrong:** every call the patch makes into the stock firmware goes through a function
+> pointer, which the TC32 compiler turns into a `tjex` instruction. `tjex` treats bit 0 of the
+> target the way Arm's `bx` does — as an instruction-set flag that must be set. The patches pass
+> plain even addresses. The evidence is that the toolchain emits `addr | 1` for its own function
+> pointers, and every callback pointer stored in the stock firmware has bit 0 set.
+>
+> **Also found in the same audit:** on the Carta 2, the flower/concentrate flag the ramp read is
+> really the °F/°C setting, and its target writes were overwritten by stock code before the
+> heater controller ever saw them. The Carta 2 marker hook also clobbered a register the stock
+> code still needed.
+>
+> Fixes are in progress and will be verified the same way as everything else here before this
+> notice comes down. No one is known to have flashed these patches.
 
 Independent, hobbyist firmware patches that add an autonomous, phone-independent temperature
 ramp to Focus V's Carta 2, Aeris, and Carta Sport dab rigs — save a schedule of

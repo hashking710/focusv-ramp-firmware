@@ -62,7 +62,7 @@ DEVICES = {
     'aeris': dict(
         src=['common/ramp_core.c', 'common/ramp_store.c', 'aeris/ramp_led.c'],
         asm=['aeris/ramp_marker_entry.s'],
-        inject=0x14000, wp=0x15000, end=0x20000,
+        inject=0x14000, wp=0x15000, end=0x16000,
         sites=[(0x6464, 'ramp_trampoline', 'tjl 0x8154'),
                (0xb490, 'ramp_marker_entry', 'tmovs r3, #53')],
         hook_all=[],

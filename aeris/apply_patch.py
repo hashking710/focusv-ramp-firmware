@@ -51,7 +51,7 @@ LENGTH_FIELD_OFFSET = 24
 # tools/build.py links it; the waypoint store has its own sector after it.
 CODE_INJECT_ADDR = 0x14000
 WAYPOINT_SECTOR = 0x15000
-IMAGE_END_ADDR = 0x20000
+IMAGE_END_ADDR = 0x16000
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_v1.bin"   # built locally, never published
 BLOB_SHA256 = "70b25307bacab4d9b2799e55fcea261d0e1bc32a17515c57b87904dd6cac01d7"   # written by tools/build.py

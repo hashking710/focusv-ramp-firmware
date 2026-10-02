@@ -11,6 +11,13 @@
  *   0x8980 session timer: +0x1a, decremented only once +0x1 (reached) is set;
  *                 at zero: stop 0x7200, bookkeeping on 0x8432ec (+31 = 200,
  *                 +32 = 250), cue 0x84324c
+ * 0xCC handler (traced, 0xb3bc-0xb490): packet at r7+0x28, big-endian, never
+ *                 clamped; C branch stores flower/conc C -> +0x3c/+0x54 and
+ *                 F = floor(9c/5)+32 -> +0x30/+0x48; holds -> +0x60/+0x6c;
+ *                 ranks -> +0x07/+0x08 -- all the custom (rank 0) slot. The
+ *                 marker (byte 13, read at 0xb490 = the hook) is only acted on
+ *                 while UI state 0x84308c+2 is 1 or 8; otherwise the packet is
+ *                 dropped without a reply (the app wakes the device first).
  * Single click / hold during a session already stops it in stock (0x4ff4 ->
  * 0x50c4 -> 0x7200; quick-heat state 7 stops on any press), so no button hook.
  */

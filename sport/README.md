@@ -31,16 +31,36 @@ Body:    90,860 bytes (after the 40-byte header), SHA-1 4b57f086a175...
 
 `apply_patch.py` patches only this exact build. There is no override.
 
-## Patch sites (2, written and checked by `tools/build.py`)
+## Patch sites (3, written and checked by `tools/build.py`)
 
 | Site | Stock | Replaced with |
 | --- | --- | --- |
 | 0x58b0 | call to orchestrator `0x7c00` (the only caller) | `ramp_trampoline`: stock tick, the ramp, then the LEDs |
 | 0xb002 | marker-byte load before the A5/AF/66 chain | `ramp_marker_entry`: waypoint upload markers |
+| 0x47a4 | LED-preset click counter's increment+store | `ramp_click_entry`: 4 clicks toggles the ramp system (see above) |
 
 The code goes at flash 0x18000 and runs at 0x18028. The waypoint store has its own sector at
 0x19000. The output image ends at 0x20000. An earlier version put the waypoint store at 0x18000,
 the same address as its own code, so the first save would have erased the patch.
+
+## On/off switch: four clicks
+
+Click the button four times in a row (the same gesture that otherwise cycles through the
+device's 5 LED presets, 1 at a time) to toggle the whole ramp system on or off, directly on the
+device, no app needed:
+
+- **Off**: no new ramp can arm, and no new waypoint can be saved -- a stage-save packet is
+  dropped with no flash write at all, the same as on stock firmware. A ramp already running
+  finishes or stops normally; it isn't interrupted.
+- **On**: back to normal.
+
+It's stored as one more byte in the same flash sector as the waypoints, so it survives a power
+cycle. A device that's never had this toggled reads as **on** -- today's behaviour, unchanged.
+
+Landing on the 4th click is repurposed, not just read: the click counter resets to 0 right then
+(matching "0 = LEDs off"), so LED preset 4 itself is never actually selected -- whatever it was
+factory-set to never lights up. Clicks 1-3 are completely untouched; the normal preset cycling
+through 1-5 still works exactly as it does on stock firmware for those.
 
 ## Device-specific behaviour, confirmed from the code that uses it
 

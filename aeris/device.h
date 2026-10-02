@@ -1,0 +1,61 @@
+/* device.h -- Aeris, PROD-111224. Each value confirmed from the stock code that
+ * consumes it:
+ *   FUN_00008154  orchestrator: session gate +0x0, reload gate +0x1, mode +0x6
+ *                 (1 = flower, otherwise concentrate), ranks +0x7 / +0x8, target
+ *                 pair +0x2c (C) / +0x2e (F) filled from the active slot; measured
+ *                 +0x2a (C, 25 + delta) and +0x28 (F = C*9/5+32)
+ *   FUN_000079cc  PID step: +0x4 == 1 -> (+0x2c - +0x2a) else (+0x2e - +0x28)
+ *   0xb3c6 / 0xb940  0xCC handler: C path writes the C tables (+0x3c / +0x54),
+ *                 F path the F tables (+0x30 / +0x48); with the PID pairing above
+ *                 that makes +0x4 == 1 Celsius (opposite to the Carta 2)
+ *   0x8980 session timer: +0x1a, decremented only once +0x1 (reached) is set;
+ *                 at zero: stop 0x7200, bookkeeping on 0x8432ec (+31 = 200,
+ *                 +32 = 250), cue 0x84324c
+ * Single click / hold during a session already stops it in stock (0x4ff4 ->
+ * 0x50c4 -> 0x7200; quick-heat state 7 stops on any press), so no button hook.
+ */
+#ifndef DEVICE_H
+#define DEVICE_H
+
+#define DEV_STRUCT          0x8430e4
+#define OFF_SESSION         0x00
+#define OFF_REACHED         0x01   /* also gates the session clock */
+#define OFF_COUNTDOWN       0x1a
+#define OFF_MEAS_F          0x28
+#define OFF_MEAS_C          0x2a
+
+#define DEV_SCALE_IS_F()    (STRUCT_BASE[0x04] != 1)
+#define DEV_MODE_IS_CONC()  (STRUCT_BASE[0x06] != 1)
+#define DEV_RANK(conc)      (STRUCT_BASE[(conc) ? 0x08 : 0x07])
+
+/* preset tables: entry = (rank + base) * 2 */
+#define DEV_PRESET_OFF(base, rank)  (((rank) + (base)) * 2)
+#define TBL_FL_F            0x18
+#define TBL_FL_C            0x1e
+#define TBL_CO_F            0x24
+#define TBL_CO_C            0x2a
+#define TBL_FL_HOLD         0x30
+#define TBL_CO_HOLD         0x36
+
+#define DEV_DAB_BASE        0x8432ec
+#define DEV_SAVE_ARM(d)     do { (d)[31] = 200; (d)[32] = 250; } while (0)
+#define DEV_END_CUE         0x84324c
+
+#define DEV_PID_TICK        0x8154
+#define DEV_STOP            0x7200
+#define DEV_ROM_DIV         0x1ac
+
+#define DEV_RAMP_FLASH      0x15000
+#define DEV_FLASH_READ      0xab8
+#define DEV_FLASH_ERASE     0xa1c
+#define DEV_FLASH_WRITE     0xa5c
+
+#define DEV_RAMP_STATE      0x848000
+
+#define DEV_MAX_F           600      /* official app's concentrate ceiling */
+
+struct ramp_state_s;
+void ramp_led_update(void);
+#define DEV_AFTER_TICK(st)  ramp_led_update()
+
+#endif

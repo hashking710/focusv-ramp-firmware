@@ -1,8 +1,9 @@
-# Local build artifacts (rebuild from source with the TC32 toolchain)
+# Compiled firmware is never published -- build it locally from source with the
+# TC32 toolchain (see tools/build.py). This covers the injected code blobs and
+# any patched or stock firmware image.
 *.o
 *.elf
 *.bin
-!*/ramp_firmware_v1.bin
 
 # OS cruft
 .DS_Store

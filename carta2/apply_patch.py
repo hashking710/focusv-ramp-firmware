@@ -1,27 +1,33 @@
 #!/usr/bin/env python3
 """
-apply_patch.py -- applies the phone-independent ramp patch to your own,
-locally-obtained Carta 2 (Quantum) firmware dump.
+apply_patch.py -- applies the on-device ramp patch to your own, locally-obtained
+Carta 2 (Quantum) firmware file (PROD-111224).
 
-This script does NOT contain, download, or embed any Focus V firmware. You
-supply your own firmware file (the full file as downloaded from Focus V's own
-update infrastructure, header included -- see docs/ble-protocol.md and
-docs/firmware-architecture.md in this repo for where that comes from). The
-script only contains our own compiled code (ramp_firmware_v1.bin, built from
-ramp_tick.c/ramp_save.c/ramp_display.c in this same directory) and a handful
-of small "patch bytes" -- replacement machine-code instructions, the same
-size as what they replace, at specific addresses. This is the same model as
-an IPS/BPS ROM-hacking patch: distributing *only* the diff, never the base
-copyrighted file. See ../LEGAL.md.
+This script does NOT contain, download, or embed any Focus V firmware, and this
+repo does not publish the compiled patch either. You build the patch's code
+blob yourself from the sources in this repo with tools/build.py, which also
+writes this script's patch table and blob hash and runs it end to end on your
+file. The script itself contains only small "patch bytes" -- same-length
+replacement instructions at specific addresses -- and the hash of the blob they
+point into. See ../LEGAL.md.
 
 Usage:
+    python3 ../tools/build.py carta2 --firmware your-firmware.bin
     python3 apply_patch.py --input your-firmware.bin --output patched.bin
 
-The output is a complete, OTA-flashable image (header + body + a freshly
-computed Telink CRC32 trailer) -- push it with tools/ota-flash.html, or keep
-your original file to push back at any time for a full, clean revert. This
-has NOT been tested on real hardware yet; see the main README's status note
-before flashing a device you depend on.
+Safeguards -- nothing is written unless ALL of these hold:
+  - the input is exactly the build the patch was verified against
+    (SHA-1 of the whole file a6b741dc0508..., 143564-byte body). There is deliberately no override: the blob hard-codes this
+    build's RAM layout and function addresses, so on any other build it would
+    act on the wrong fields even if every patch site happened to match
+  - every patch site holds exactly the expected stock instruction
+  - the stock image ends before the patch's code region
+  - the blob is the one this patch table was generated for (SHA-256), and it
+    ends before the waypoint sector
+
+The output is a complete OTA image (header + body + fresh Telink CRC32
+trailer). Keep your original file: flashing it back is a full revert.
+NOT TESTED ON HARDWARE -- see the README's warning before flashing anything.
 """
 
 import argparse
@@ -32,12 +38,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
-# Confirmed Carta 2 "PROD-111224" build fingerprint -- first 12 hex chars of
-# the SHA-1 of the complete file exactly as downloaded (header included), see
-# docs/firmware-architecture.md. This is a sanity check, not a hard
-# requirement: a different build will very likely have these exact call
-# sites at different addresses, so proceeding anyway is very likely to
-# corrupt the image rather than patch it cleanly.
+# SHA-1 (first 12 hex) of the complete file as downloaded, header included.
 EXPECTED_SHA1_PREFIX = "a6b741dc0508"
 EXPECTED_BODY_LEN = 143564  # bytes, header excluded
 
@@ -45,89 +46,51 @@ HEADER_LEN = 40
 KNLT_OFFSET = 8
 LENGTH_FIELD_OFFSET = 24
 
-# Flash sector this patch's own code lives in (confirmed free space ahead of
-# the OTA staging area -- see firmware-architecture.md). The image is grown
-# to cover this whole sector plus the waypoint-storage sector right after it.
+# Flash layout (physical address = file offset). The blob goes at file offset
+# HEADER_LEN + CODE_INJECT_ADDR, so it runs at CODE_INJECT_ADDR + 0x28, where
+# tools/build.py links it; the waypoint store has its own sector after it.
 CODE_INJECT_ADDR = 0x30000
-IMAGE_END_ADDR = 0x32000
+WAYPOINT_SECTOR = 0x32000
+IMAGE_END_ADDR = 0x33000
 
-CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_v1.bin"
+CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_v1.bin"   # built locally, never published
+BLOB_SHA256 = "9de0cff85390837bb92be3c2449095aa72e774ea35f413fe58307da66bf1798d"   # written by tools/build.py
 
-# Each entry: (patch address, expected original bytes, replacement bytes).
-# The expected-original check is what keeps this script from silently
-# corrupting a firmware build these addresses weren't confirmed against --
-# if your file doesn't match, the script stops instead of guessing.
-#
-# All seven are same-length call-site swaps -- a single `tjl <addr>`
-# instruction replaced with another `tjl <addr>` of identical length (4
-# bytes each). Nothing is inserted or removed, so every other byte in the
-# image is untouched. See ramp_tick.c/ramp_save.c/ramp_display.c for what
-# each replacement actually does.
-#
-# Every address below was independently re-confirmed directly against the
-# real PROD-111224 binary -- not carried over from an earlier build. Two of
-# them (the PID-tick call site and the marker-dispatch call site) required
-# real additional work to get right: an earlier draft of this patch had both
-# at stale addresses inherited from a different, older firmware build. The
-# PID-tick call site (0x6e2e) was ultimately confirmed by an exhaustive scan
-# -- checking every possible 4-byte-aligned position in the entire
-# 143,564-byte firmware for a `tjl 0xaf2c` encoding, generated by the real
-# assembler, not guessed -- which found exactly one match in the whole file.
-# The marker-dispatch site turned out to need a different approach entirely:
-# the real BLE marker-check code only reaches any given marker's handler
-# (0xA5/0xAF/0x66) through a fixed compare chain that the five new
-# ramp-waypoint markers (0xB1-0xB5) never match, so this patch intercepts
-# the marker *load*, before that chain runs, not any single leaf of it --
-# see ramp_save.c and marker_entry.s (renamed from the single-leaf version
-# this folder shipped with a different, stale address, before this
-# correction) for the full reasoning.
-#
-# Two more sites (0xfa3c, 0xfa58) were added in a later revision after an
-# audit of this already-shipped patch found FUN_0000dcac and FUN_0000e300 --
-# two more elements FUN_0000fa1c draws every tick -- were never suppressed
-# by the original 5-patch version, despite drawing inside the graph's own
-# screen area. See ramp_display.c's header for the full story. Adding them
-# shifted every address inside the injected code blob (new functions moved
-# everything after them), so all five of the *original* replacement values
-# below changed too, even though their patch addresses and original/expected
-# bytes didn't -- every one of the 7 replacement values here was regenerated
-# fresh from the real assembler against the rebuilt blob, not hand-adjusted.
+# (address in the header-stripped body, expected stock bytes, replacement).
+# Written by tools/build.py: each original decodes to the named stock
+# instruction; each replacement is the real assembler's `tjl` to the named
+# function in the blob above.
 PATCHES = [
-    # PID-tick call site -> ramp_trampoline, which runs the original
-    # per-tick PID/session orchestrator (FUN_0000af2c) unmodified, then the
-    # ramp sequencer.
-    (0x6e2e, bytes.fromhex("04907d98"), bytes.fromhex("2990e798")),
-    # Marker-byte load, just before the stock A5/AF/66 compare chain inside
-    # the 0xCC handler's marker dispatch -> ramp_marker_entry, which
-    # replicates that same load (so the untouched chain right after this
-    # call site keeps working exactly as before for every marker value this
-    # patch doesn't care about), and in between, calls ramp_marker_dispatch
-    # to handle the five new waypoint-save markers.
-    (0x11d96, bytes.fromhex("28a3eb1c"), bytes.fromhex("1e90bf9c")),
-    # Live-heating-screen temp display -> ramp_temp_display (graph when a
-    # ramp is active, original dial otherwise).
-    (0xfa38, bytes.fromhex("fd97c29c"), bytes.fromhex("2090629c")),
-    # Secondary temp+gauge display -> ramp_secondary_or_skip (suppressed
-    # during a ramp -- this is one of the two gap sites, see above; left
-    # unpatched it draws its own digits over the graph's right-hand side).
-    (0xfa3c, bytes.fromhex("fe973699"), bytes.fromhex("20903a9e")),
-    # Session countdown timer -> ramp_countdown_or_skip (suppressed during a
-    # ramp -- it doesn't apply once a ramp has its own per-stage timing).
-    (0xfa50, bytes.fromhex("fd97fa9a"), bytes.fromhex("20903c9e")),
-    # Active-preset badge -> ramp_badge_or_skip (suppressed during a ramp,
-    # freeing that screen space for the stage-digit indicator instead).
-    (0xfa54, bytes.fromhex("fe97ea9c"), bytes.fromhex("2090469e")),
-    # Lower-row status icon -> ramp_status_icon_or_skip (suppressed during a
-    # ramp -- the other gap site; left unpatched it redraws an icon in the
-    # same row the countdown/badge above are already suppressed in).
-    (0xfa58, bytes.fromhex("fe97529c"), bytes.fromhex("2090509e")),
+    (0x6D0C, bytes.fromhex("fe97849c"), bytes.fromhex("2a90c299")),  # tjl 0x5618 -> ramp_event_entry
+    (0x6E2E, bytes.fromhex("04907d98"), bytes.fromhex("29906e99")),  # tjl 0xaf2c -> ramp_trampoline
+    (0xE706, bytes.fromhex("fe97b39b"), bytes.fromhex("22909d9c")),  # tjl 0xce70 -> ramp_ce70_hide
+    (0xE70A, bytes.fromhex("fe97259c"), bytes.fromhex("2290a79c")),  # tjl 0xcf58 -> ramp_cf58_hide
+    (0xE9B0, bytes.fromhex("fe975e9a"), bytes.fromhex("2290489b")),  # tjl 0xce70 -> ramp_ce70_hide
+    (0xE9B6, bytes.fromhex("fe97cf9a"), bytes.fromhex("2290519b")),  # tjl 0xcf58 -> ramp_cf58_hide
+    (0xEB42, bytes.fromhex("fe979599"), bytes.fromhex("22907f9a")),  # tjl 0xce70 -> ramp_ce70_hide
+    (0xEB46, bytes.fromhex("fe97079a"), bytes.fromhex("2290899a")),  # tjl 0xcf58 -> ramp_cf58_hide
+    (0xF36C, bytes.fromhex("fd97809d"), bytes.fromhex("21906a9e")),  # tjl 0xce70 -> ramp_ce70_hide
+    (0xF370, bytes.fromhex("fd97f29d"), bytes.fromhex("2190749e")),  # tjl 0xcf58 -> ramp_cf58_hide
+    (0xF39C, bytes.fromhex("fe97869c"), bytes.fromhex("2190449e")),  # tjl 0xdcac -> ramp_dcac_view
+    (0xF4A8, bytes.fromhex("fe974a9b"), bytes.fromhex("2190e49d")),  # tjl 0xdb40 -> ramp_db40_hide
+    (0xF4AC, bytes.fromhex("fd97e09c"), bytes.fromhex("2190ca9d")),  # tjl 0xce70 -> ramp_ce70_hide
+    (0xF4B0, bytes.fromhex("fd97529d"), bytes.fromhex("2190d49d")),  # tjl 0xcf58 -> ramp_cf58_hide
+    (0xF546, bytes.fromhex("fd973b9f"), bytes.fromhex("2190559d")),  # tjl 0xd3c0 -> ramp_d3c0_view
+    (0xF54C, bytes.fromhex("fe97f89a"), bytes.fromhex("2190929d")),  # tjl 0xdb40 -> ramp_db40_hide
+    (0xF558, bytes.fromhex("fd978a9c"), bytes.fromhex("2190749d")),  # tjl 0xce70 -> ramp_ce70_hide
+    (0xF55C, bytes.fromhex("fd97fc9c"), bytes.fromhex("21907e9d")),  # tjl 0xcf58 -> ramp_cf58_hide
+    (0xFA30, bytes.fromhex("fd971e9a"), bytes.fromhex("2190089b")),  # tjl 0xce70 -> ramp_ce70_hide
+    (0xFA34, bytes.fromhex("fd97909a"), bytes.fromhex("2190129b")),  # tjl 0xcf58 -> ramp_cf58_hide
+    (0xFA38, bytes.fromhex("fd97c29c"), bytes.fromhex("2190c89a")),  # tjl 0xd3c0 -> ramp_d3c0_full
+    (0xFA3C, bytes.fromhex("fe973699"), bytes.fromhex("2190e89a")),  # tjl 0xdcac -> ramp_dcac_full
+    (0xFA40, bytes.fromhex("fe977e98"), bytes.fromhex("2190189b")),  # tjl 0xdb40 -> ramp_db40_hide
+    (0x11D96, bytes.fromhex("28a3eb1c"), bytes.fromhex("1f90c999")),  # tmovs r3, #40 -> ramp_marker_entry
 ]
 
 
 def telink_crc32(data: bytes) -> int:
-    """Reflected CRC32, poly 0xEDB88320, init 0xFFFFFFFF, NO final XOR --
-    confirmed against both official Focus V images' own trailers (see
-    firmware-architecture.md). This is *not* the same as zlib.crc32()."""
+    """Reflected CRC32, poly 0xEDB88320, init 0xFFFFFFFF, NO final XOR (the
+    Telink OTA trailer). Not the same as zlib.crc32()."""
     crc = 0xFFFFFFFF
     for byte in data:
         crc ^= byte
@@ -136,87 +99,65 @@ def telink_crc32(data: bytes) -> int:
     return crc & 0xFFFFFFFF
 
 
+def fail(msg: str) -> int:
+    print("error: " + msg, file=sys.stderr)
+    print("nothing was written.", file=sys.stderr)
+    return 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--input", required=True, type=Path, help="your own stock firmware file (header included)")
-    parser.add_argument("--output", required=True, type=Path, help="where to write the patched, OTA-ready image")
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="apply the patch even if the input doesn't match the confirmed build fingerprint",
-    )
+    parser.add_argument("--output", required=True, type=Path, help="where to write the patched OTA image")
     args = parser.parse_args()
 
     raw = args.input.read_bytes()
-    if len(raw) < HEADER_LEN + 4:
-        print("error: that file is too small to be a real firmware image", file=sys.stderr)
-        return 1
-
-    magic = raw[KNLT_OFFSET : KNLT_OFFSET + 4]
-    if magic != b"KNLT":
-        print(f'error: no "KNLT" header at byte 8 (found {magic!r}) -- is this the right file?', file=sys.stderr)
-        return 1
+    if len(raw) < HEADER_LEN + 4 or raw[KNLT_OFFSET:KNLT_OFFSET + 4] != b"KNLT":
+        return fail('not a Focus V firmware image (no "KNLT" header at byte 8)')
 
     header = bytearray(raw[:HEADER_LEN])
-    # Everything after the header, exactly as downloaded -- including Focus V's
-    # own trailer, if this build has one. It doesn't need to be identified or
-    # stripped: every patch site sits well before the injected-code sector at
-    # 0x30000, so whatever's in the original file's last few bytes just ends up
-    # harmlessly inside the 0xFF-padded gap before that sector in the output,
-    # and a fresh trailer covering the *whole* new image is computed below
-    # regardless of whether one was present going in.
-    body = bytearray(raw[HEADER_LEN:])
+    body = bytearray(raw[HEADER_LEN:])   # includes the stock trailer; harmless, see below
 
-    fingerprint = hashlib.sha1(bytes(raw)).hexdigest()[:12]
+    fingerprint = hashlib.sha1(raw).hexdigest()[:12]
     if fingerprint != EXPECTED_SHA1_PREFIX or len(body) != EXPECTED_BODY_LEN:
-        print(
-            "warning: this doesn't match the exact build these patch addresses were confirmed\n"
-            f"against (PROD-111224, fingerprint {EXPECTED_SHA1_PREFIX}, {EXPECTED_BODY_LEN} bytes).\n"
-            f"got fingerprint {fingerprint}, {len(body)} bytes. a different build likely has these\n"
-            "call sites at different addresses -- applying this patch anyway will probably corrupt\n"
-            "the image rather than patch it cleanly.",
-            file=sys.stderr,
-        )
-        if not args.force:
-            print("refusing to continue without --force.", file=sys.stderr)
-            return 1
-        print("--force given, continuing anyway.", file=sys.stderr)
+        return fail(f"not the verified build: fingerprint {fingerprint}, {len(body)} bytes; "
+                    f"expected {EXPECTED_SHA1_PREFIX}, {EXPECTED_BODY_LEN} bytes")
 
-    for addr, expected, replacement in PATCHES:
-        n = len(expected)
-        actual = bytes(body[addr : addr + n])
+    if HEADER_LEN + len(body) > HEADER_LEN + CODE_INJECT_ADDR:
+        return fail("the stock image runs into the patch's code region")
+
+    for addr, expected, _ in PATCHES:
+        actual = bytes(body[addr:addr + len(expected)])
         if actual != expected:
-            print(
-                f"error: byte mismatch at {addr:#x} -- expected {expected.hex()}, found {actual.hex()}.\n"
-                "this firmware doesn't match what this patch was built for; refusing to touch it.",
-                file=sys.stderr,
-            )
-            return 1
+            return fail(f"byte mismatch at {addr:#x}: expected {expected.hex()}, found {actual.hex()}")
 
-    for addr, _expected, replacement in PATCHES:
-        body[addr : addr + len(replacement)] = replacement
-
-    if len(body) < IMAGE_END_ADDR:
-        body.extend(b"\xff" * (IMAGE_END_ADDR - len(body)))
-
+    if not CODE_BLOB_PATH.exists():
+        return fail(f"{CODE_BLOB_PATH.name} not found -- build it first: "
+                    "python3 ../tools/build.py carta2 --firmware <your file>")
     code_blob = CODE_BLOB_PATH.read_bytes()
-    if CODE_INJECT_ADDR + len(code_blob) > IMAGE_END_ADDR:
-        print("error: injected code blob no longer fits its reserved sector", file=sys.stderr)
-        return 1
-    body[CODE_INJECT_ADDR : CODE_INJECT_ADDR + len(code_blob)] = code_blob
+    if hashlib.sha256(code_blob).hexdigest() != BLOB_SHA256:
+        return fail(f"{CODE_BLOB_PATH.name} is not the blob this patch table was generated for -- "
+                    "rebuild with tools/build.py")
+    if HEADER_LEN + CODE_INJECT_ADDR + len(code_blob) > WAYPOINT_SECTOR:
+        return fail("the code blob would run into the waypoint sector")
 
-    total_len = HEADER_LEN + len(body) + 4
-    struct.pack_into("<I", header, LENGTH_FIELD_OFFSET, total_len)
+    for addr, _, replacement in PATCHES:
+        body[addr:addr + len(replacement)] = replacement
+    # Grow the image with erased flash (0xFF) up to IMAGE_END_ADDR: the stock
+    # trailer left at the end of `body` sits unused in this gap, and the
+    # waypoint sector ships erased, so a flash always starts with an empty store.
+    body.extend(b"\xff" * (IMAGE_END_ADDR - HEADER_LEN - len(body)))
+    body[CODE_INJECT_ADDR:CODE_INJECT_ADDR + len(code_blob)] = code_blob
 
+    struct.pack_into("<I", header, LENGTH_FIELD_OFFSET, HEADER_LEN + len(body) + 4)
     payload = bytes(header) + bytes(body)
-    trailer = struct.pack("<I", telink_crc32(payload))
-    final_image = payload + trailer
+    final_image = payload + struct.pack("<I", telink_crc32(payload))
 
     args.output.write_bytes(final_image)
     print(f"wrote {args.output} ({len(final_image)} bytes)")
-    print("keep your original input file -- push it back with tools/ota-flash.html any time to revert.")
+    print("keep your original file -- flashing it back is a full revert.")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())

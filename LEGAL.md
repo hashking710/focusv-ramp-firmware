@@ -46,9 +46,9 @@ This is the specific question that distinguishes this repo from simply "here's a
 firmware.bin, download it": **this repo never contains a complete, ready-to-flash image that
 includes any of Focus V's own code.** What it contains instead:
 
-- **Original source** (`ramp_tick.c`, `ramp_save.c`, `ramp_display.c`, and the device-specific
-  equivalents) — written from scratch for this project, compiled with the real TC32 toolchain so
-  anyone can verify the output themselves.
+- **Original source** (`common/`, and each device's `device.h` and display / LED / input code) —
+  written from scratch for this project. No compiled code is published: you build it yourself with
+  the TC32 toolchain via `tools/build.py`, which also verifies the result against your own file.
 - **A small table of patch sites** — for each one, an address, the handful of bytes expected to
   already be there, and the bytes to replace them with. Nothing here reproduces any meaningful
   amount of Focus V's own code; a same-length instruction swap at a documented address is a fact

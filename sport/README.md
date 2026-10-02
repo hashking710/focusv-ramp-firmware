@@ -2,10 +2,10 @@
 
 # Carta Sport ramp patch
 
-> [!CAUTION]
-> **Do not flash this patch.** It has not run on real hardware. Earlier published versions had two
-> crash-on-boot bugs; see the [main README](../README.md). They're fixed in this source, but only
-> a bench test can confirm it works.
+> [!WARNING]
+> **Not yet tested on real hardware.** It passes every build check and an independent
+> disassembler cross-check; flash only a device you can recover over SWire. See the
+> [main README](../README.md).
 
 Runs a Terpline-uploaded ramp of up to 5 stages on the device itself. It shows progress on the
 Sport's 5 RGB LEDs, the same way as the Aeris:

@@ -2,34 +2,37 @@
  *
  * LAYOUT during a ramp (240 x 240):
  *
- *   y 20   LEFT  battery % + battery icon       RIGHT  end temp (last stage) + unit
- *   y 38                                         RIGHT  end-temp underline, end-stage colour
+ *   y 20   LEFT  battery % + battery icon       RIGHT  stage goal / ramp max + unit
  *   y 44   LEFT  session time left (M:SS, large) RIGHT  live temperature (large)
- *   y 78-191     the equalizer, x 142-233: one bar per stage, height + colour both
- *                from that stage's temperature relative to this ramp's own
- *                coolest-to-hottest span (never pinned to an absolute 0 deg
- *                scale, so it reads consistently on a small screen regardless
- *                of the ramp's real temperatures) -- done = solid, in progress
- *                = rises from the baseline as the stage does, with a bright cap
- *                at its target; next = outline only. A white tick on the active
- *                bar marks the live measured temperature on that same scale.
- *                x 0-141 is deliberately empty: the equalizer reads as a small
- *                live instrument, not a full chart, so it doesn't need the rest
- *                of the row to stay legible.
- *   y 193+ STOCK dab counter + mode icon, or the READY banner once a stage's
- *                temperature is reached
+ *   y 72-196     LEFT  the chart, x 6-219, framed by a left axis, a baseline and a
+ *                      right axis:
+ *                        arc   -- the goal: the ramp's planned temperature over
+ *                                 time, a smooth line through each stage's start,
+ *                                 coloured by heat
+ *                        trace -- the measured temperature since the ramp began,
+ *                                 one sample per column, white; its newest point
+ *                                 bounces with the live reading, and stepping
+ *                                 back a stage (-) rewinds it
+ *                RIGHT the heat meter, x 227-233: 10 circles, blue at the bottom
+ *                      to red at the top, lit up to the live temperature
+ *   y 202-224    LEFT  the Terpline flame mark + wordmark (logo_strip.h)
+ *                RIGHT "DABS" + the dab count, right-aligned: the same per-mode
+ *                      counter the stock screen shows (flower +0 / concentrate
+ *                      +2 at 0x8430e0, chosen by mode the way d048 does)
+ * The stock bottom row (y 193-225: dab counter, mode / status icons, READY
+ * banner) is hidden during a ramp, so the chart and logo can use it.
  *
- * Bars normally grow stage over stage, since a ramp normally heats up; the
- * exception is the Carta 2's own - button, which steps back to a cooler
- * stage (ramp_input.c) and so is the one input that visibly makes the active
- * bar shorter than the one before it.
+ * Both the chart's height and the meter use this ramp's own range (its
+ * coolest stage minus a margin, up to its hottest), never an absolute degree
+ * scale, so every ramp fills the box the same way.
  *
  * HOOKS. Stock elements whose space this layout uses are hidden only while a
  * ramp is active, at every one of their call sites:
  *   d3c0 (live temp + gauge)  fa38 (in fa1c) / f546 (view 13)  -> draws this UI
  *   dcac (session countdown)  fa3c (in fa1c) / f39c (views 8, 15, every second)
  *                                                               -> draws this UI
- *   ce70 (target), cf58 (slot hold), db40 (battery)  -- every caller -> hidden
+ *   ce70 (target), cf58 (slot hold), db40 (battery),
+ *   d048 / e42c / e300 / e2b4 (the bottom row)        -- every caller -> hidden
  * The fa1c sites always follow a full screen clear, so they redraw everything;
  * the view sites update incrementally. When no ramp is active every hook calls
  * the original, unchanged.
@@ -40,6 +43,7 @@
  * which no colour here is. Glyph pointers are runtime flash addresses.
  */
 #include "ramp.h"
+#include "logo_strip.h"
 
 typedef void (*fill_rect_fn)(u8 x, u8 y, u8 w, u8 h, u8 hi, u8 lo);
 typedef void (*blit_fn)(u8 x, u8 y, u8 w, u8 h, u8 hi, u8 lo, const void *glyph);
@@ -52,6 +56,10 @@ typedef void (*batt_anim_fn)(int x, int y, int w, int h, int a, int b, int c, in
 #define orig_ce70   STOCK_FN(void_fn, 0xce70)
 #define orig_cf58   STOCK_FN(void_fn, 0xcf58)
 #define orig_db40   STOCK_FN(void_fn, 0xdb40)
+#define orig_d048   STOCK_FN(void_fn, 0xd048)   /* bottom row: dab counter */
+#define orig_e42c   STOCK_FN(void_fn, 0xe42c)   /*   mode icon */
+#define orig_e300   STOCK_FN(void_fn, 0xe300)   /*   status icon */
+#define orig_e2b4   STOCK_FN(void_fn, 0xe2b4)   /*   READY banner */
 
 /* stock data, as db40 reads it */
 #define BATTERY_PCT   (*(volatile u8 *)(0x84309c + 0x14))
@@ -69,25 +77,29 @@ typedef void (*batt_anim_fn)(int x, int y, int w, int h, int a, int b, int c, in
 #define C_INK    0xFFFF
 #define C_TIME   0xAD97   /* rgb(173,178,189) */
 #define C_LOW    0xFE40   /* db40's own low-battery colour */
-#define C_AXIS   0x2967
+#define C_AXIS   0x4A69   /* rgb(72,76,72) */
+#define C_DOT_OFF 0x18E3  /* unlit meter circle, rgb(24,28,24) */
 
 #define ROW_A    20
 #define ROW_B    44
-#define MID_Y1   192
+#define SCREEN_Y1 225                       /* last row the ramp screen owns */
 
-/* the equalizer: x 142-233 (right-aligned to the same x = 233 as the target /
- * live digits above it), y 78-186 -- the exact pixel box the original full-
- * width chart proved safe (clear region 0,74,240,118 stays above the stock
- * dab-counter / READY-banner row at y >= 192, confirmed by decompile; see the
- * git history for how that boundary was found). Only the box is reused: the
- * bars inside it are new. */
-#define EQ_X0    142
-#define EQ_X1    233
-#define GY_TOP   78
-#define GY_BASE  186
-#define EQ_GAP   4
-#define MIN_H    14                      /* every bar's visible floor, even at 0 */
-#define MAX_H    (GY_BASE - GY_TOP)       /* height of the hottest stage in this ramp */
+/* Below the header the ramp screen owns y 70-225: the original chart box plus
+ * the stock bottom row (y 193-225, hidden during a ramp). 225 is the lowest row
+ * the stock screen itself draws, so nothing here goes below it. */
+#define CLEAR_Y  70
+#define AX_L     6                          /* left axis */
+#define CX0      8                          /* first chart column */
+#define AX_R     (CX0 + RAMP_TRACE_LEN + 1) /* right axis, x 219 */
+#define PY_TOP   74                         /* hottest plotted temperature */
+#define PY_BOT   193                        /* coolest plotted temperature */
+#define BASE_Y   196                        /* baseline */
+#define AX_TOP   72                         /* top of both axes = top circle */
+#define MTR_X    226                        /* heat meter: right edge x 233, as the text */
+#define MTR_N    10
+#define MTR_PITCH 13
+#define MTR_Y0   (BASE_Y - 7)               /* 8 px circles: bottom y 189-196, top 72-79,
+                                             * so the meter spans exactly the chart frame */
 
 static void rect(int x, int y, int w, int h, u16 c)
 {
@@ -118,79 +130,103 @@ static u16 heat(int frac)
     b = STOP_B[seg] + (((STOP_B[seg + 1] - STOP_B[seg]) * t) >> 8);
     return (u16)((r << 11) | (g << 5) | b);
 }
-static u16 dim(u16 c, int k)
-{
-    return (u16)(((((c >> 11) & 31) * k >> 8) << 11) | ((((c >> 5) & 63) * k >> 8) << 5) | ((c & 31) * k >> 8));
-}
 
-/* ---- ramp geometry (F; unit-independent) -----------------------------------
- * min_f/span are this ramp's OWN coolest-to-hottest stage, never an absolute
- * temperature scale -- every height and colour below is a 0-255 fraction of
- * that span, so two ramps with very different real temperatures still fill
- * the same pixel box the same way. */
-typedef struct { int min_f, span; } scale_t;
+/* heat meter, bottom to top: blue, blue, green, green, yellow, yellow,
+ * orange, orange, red, red */
+static const u16 MTR_C[MTR_N] = {
+    0x051C, 0x051C, 0x25A8, 0x25A8, 0xFF20, 0xFF20, 0xFC03, 0xFC03, 0xE0E3, 0xE0E3
+};
+
+/* ---- ramp geometry (F; unit-independent) ----------------------------------
+ * The plotted range is this ramp's own: from its coolest stage minus a margin
+ * (so the climb from the start is visible) to its hottest plus a little
+ * headroom -- never pinned to an absolute degree scale. */
+typedef struct { int lo, hi; } scale_t;
 
 static void ramp_scale(volatile ramp_state_t *st, scale_t *s)
 {
-    int mx = 0, mn = 0x7fff, i;
+    int mx = 0, mn = 0x7fff, i, span;
     for (i = 0; i < st->n_stages; i++) {
         int f = WP_F(st, i);
         if (f > mx) mx = f;
         if (f < mn) mn = f;
     }
-    s->min_f = mn;
-    s->span = mx - mn;
+    span = mx - mn;
+    s->lo = mn - (span ? (span >> 1) + 15 : 40);
+    s->hi = mx + 5;
 }
-static u16 stage_frac(volatile ramp_state_t *st, scale_t *s, int i)
+/* 0-255 position of a temperature within the plotted range, clamped */
+static u16 temp_frac(scale_t *s, int f)
 {
-    return s->span ? udiv((WP_F(st, i) - s->min_f) * 255, s->span) : 255;
+    if (f <= s->lo) return 0;
+    if (f >= s->hi) return 255;
+    return udiv((f - s->lo) * 255, s->hi - s->lo);
 }
-static int eq_bar_h(u16 frac255)
+static int temp_y(scale_t *s, int f)
 {
-    return MIN_H + udiv((MAX_H - MIN_H) * frac255, 255);
+    return PY_BOT - udiv(temp_frac(s, f) * (PY_BOT - PY_TOP), 255);
 }
-/* n equal-width columns across EQ_X0..EQ_X1, same min-width guard as the
- * previous time-proportional layout (a column must never come out < 1 px
- * wide, which would make the rects below misbehave). */
-static void eq_col_x(u8 n, int i, int *x0, int *w)
+
+/* The goal at chart column c: a smooth line through (start of stage i, its
+ * target) for each stage, flat at the last target to the end of the ramp. */
+static int goal_f(volatile ramp_state_t *st, int c)
 {
-    int a = EQ_X0 + udiv((EQ_X1 - EQ_X0) * i, n);
-    int b = EQ_X0 + udiv((EQ_X1 - EQ_X0) * (i + 1), n);
-    *x0 = a;
-    *w = b - a - EQ_GAP;
-    if (*w < 2)
-        *w = 2;
+    int t = udiv(c * st->total_s, RAMP_TRACE_LEN - 1);
+    int a = 0, b, i, fa, fb;
+    for (i = 0; i < st->n_stages; i++) {
+        fa = WP_F(st, i);
+        if (i + 1 == st->n_stages)
+            return fa;
+        b = a + WP_HOLD(st, i);
+        if (t <= b) {
+            fb = WP_F(st, i + 1);
+            if (b <= a)
+                return fa;
+            /* the divider is unsigned: a cooler next stage is handled by sign */
+            return fb >= fa ? fa + udiv((fb - fa) * (t - a), b - a)
+                            : fa - udiv((fa - fb) * (t - a), b - a);
+        }
+        a = b;
+    }
+    return WP_F(st, 0);
+}
+
+/* the chart column for "now" */
+static int now_col(volatile ramp_state_t *st)
+{
+    int c = udiv(ramp_elapsed(st) * (RAMP_TRACE_LEN - 1), st->total_s);
+    return c > RAMP_TRACE_LEN - 1 ? RAMP_TRACE_LEN - 1 : c;
 }
 
 /* ---- left column ---------------------------------------------------------- */
 
+/* "68%" then the icon 5 px after the '%' (x 49, or x 61 at 100%). The row is
+ * cleared whenever the value changes, since 100% shifts everything right. */
 static void draw_battery(volatile ramp_state_t *st, u8 force)
 {
     u8 v = BATTERY_PCT;
-    int h, t, o;
+    int h, t, o, x = 6, icon_x;
     if (!force && v == st->drawn_batt)
         return;
     split3(v, &h, &t, &o);
-    if (v > 99) { small(6, ROW_A, h, C_INK); small(18, ROW_A, t, C_INK); small(30, ROW_A, o, C_INK); }
-    else {
-        /* clears the 100% layout's third digit AND its '%' (x 42-55), which
-         * the 2-digit '%' at x 30-43 only partly covers */
-        rect(30, ROW_A, 30, 17, C_BLACK);
-        if (v > 9) small(6, ROW_A, t, C_INK); else rect(6, ROW_A, 10, 17, C_BLACK);
-        small(18, ROW_A, o, C_INK);
-    }
-    blit(6 + (v > 99 ? 36 : 24), ROW_A, 13, 16, 0xff, 0xff, SMALL + G_PCT * 0x22);
+    rect(6, ROW_A, 86, 17, C_BLACK);
+    if (v > 99) { small(x, ROW_A, h, C_INK); x += 12; }
+    if (v > 9)  { small(x, ROW_A, t, C_INK); x += 12; }
+    small(x, ROW_A, o, C_INK); x += 12;
+    blit(x, ROW_A, 13, 16, 0xff, 0xff, SMALL + G_PCT * 0x22);
+    icon_x = x + 14 + 5;
     if (CHARGING)
-        batt_anim(6 + 54, ROW_A, 0x1d, 0x10, 6, 7, 0xff, 0xff, 0x36, 0xa9);
+        batt_anim(icon_x, ROW_A, 0x1d, 0x10, 6, 7, 0xff, 0xff, 0x36, 0xa9);
     else {
         u16 c = (BATTERY_LOW == 1 || v < 21) ? C_LOW : C_INK;
         int icon = v > 3 ? udiv(v - 1, 20) + 1 : 0;
-        blit(6 + 54, ROW_A, 0x1d, 0x10, (u8)(c >> 8), (u8)c, BATT_ICON + icon * 0x44);
+        blit(icon_x, ROW_A, 0x1d, 0x10, (u8)(c >> 8), (u8)c, BATT_ICON + icon * 0x44);
     }
     st->drawn_batt = v;
 }
 
-/* M:SS in the large font; cleared only when the minute width changes */
+/* M:SS in the large font, counting down from the ramp's total; cleared only
+ * when the minute width changes */
 static void draw_time(volatile ramp_state_t *st, u8 force)
 {
     u16 left = st->last_left, m, s;
@@ -217,24 +253,38 @@ static void draw_time(volatile ramp_state_t *st, u8 force)
 
 /* ---- right column (right-aligned to x = 233) -------------------------------- */
 
-/* The ramp's END temperature -- the last stage's target, constant for the
- * whole ramp -- not the current stage's (the equalizer shows that instead,
- * as the bar you're currently climbing). Lets you see at a glance where the
- * whole ramp finishes, next to the live reading right below it. */
-static void draw_end(volatile ramp_state_t *st, scale_t *s, u8 force)
+static void digits3(int x, u16 v, u16 c)
 {
-    u16 v = DEV_SCALE_IS_F() ? WP_F(st, st->n_stages - 1) : WP_C(st, st->n_stages - 1);
-    if (!force && v == st->drawn_target)
-        return;
     int h, t, o;
     if (v > 999) v = 999;
     split3(v, &h, &t, &o);
-    if (v > 99) small(183, ROW_A, h, C_INK); else rect(183, ROW_A, 10, 17, C_BLACK);
-    small(195, ROW_A, t, C_INK);
-    small(207, ROW_A, o, C_INK);
-    blit(219, ROW_A, 14, 16, 0xff, 0xff, SMALL + (G_DEG_C + (DEV_SCALE_IS_F() ? 1 : 0)) * 0x22);
-    rect(183, 38, 51, 2, heat(stage_frac(st, s, st->n_stages - 1)));
-    st->drawn_target = v;
+    small(x, ROW_A, h, c);
+    small(x + 12, ROW_A, t, c);
+    small(x + 24, ROW_A, o, c);
+}
+
+/* "goal/max": the current stage's target, in its heat colour, then the
+ * ramp's highest target. Every valid ramp temperature is 3 digits in either
+ * unit (flower 135-260 C / 275-500 F, concentrate 185-335 C / 365-635 F), so
+ * the positions are fixed. */
+static void draw_goal(volatile ramp_state_t *st, scale_t *s, u8 force)
+{
+    u8 f = DEV_SCALE_IS_F();
+    int i = st->stage - 1, k;
+    u16 goal = f ? WP_F(st, i) : WP_C(st, i), mx = 0;
+    if (!force && goal == st->drawn_target)
+        return;
+    for (k = 0; k < st->n_stages; k++) {
+        u16 v = f ? WP_F(st, k) : WP_C(st, k);
+        if (v > mx) mx = v;
+    }
+    rect(130, ROW_A, 104, 17, C_BLACK);
+    digits3(136, goal, heat(temp_frac(s, WP_F(st, i))));
+    for (k = 0; k < 6; k++)                       /* '/' */
+        rect(173 + k, ROW_A + 14 - k * 3, 2, 3, C_TIME);
+    digits3(183, mx, C_TIME);
+    blit(219, ROW_A, 14, 16, 0xff, 0xff, SMALL + (G_DEG_C + (f ? 1 : 0)) * 0x22);
+    st->drawn_target = goal;
 }
 
 static void draw_live(volatile ramp_state_t *st, u8 force)
@@ -252,71 +302,114 @@ static void draw_live(volatile ramp_state_t *st, u8 force)
     st->drawn_hero = v;
 }
 
-/* ---- the equalizer ---------------------------------------------------------
- * One bar per stage, equal width, x 142-233. Height and colour both come from
- * stage_frac() -- this ramp's own relative heat, 0-255 -- never from an
- * absolute degree scale, so the box fills the same way regardless of the
- * ramp's real temperatures. Done stages are solid blocks; the active stage
- * rises from the baseline as it progresses, capped with a bright tick at its
- * own target; later stages are outlines only. */
+/* ---- the chart -------------------------------------------------------------- */
 
-static void draw_eq_current(volatile ramp_state_t *st, scale_t *s, u8 force)
+/* a vertical run joining y0 and y1 in one column, 2 px thick */
+static void join(int x, int y0, int y1, u16 c)
 {
-    int i = st->stage - 1, x0, w, h, y, fill, my;
-    u16 frac = stage_frac(st, s, i);
-    u16 c = heat(frac), mfrac;
-    u16 hold = WP_HOLD(st, i), el = ramp_elapsed(st), start = stage_start(st, st->stage);
-    u16 into = el > start ? el - start : 0;
-    int mf = FIELD16(OFF_MEAS_F);
-
-    eq_col_x(st->n_stages, i, &x0, &w);
-    h = eq_bar_h(frac);
-    y = GY_BASE - h;
-    fill = hold ? udiv(h * (into > hold ? hold : into), hold) : h;
-
-    /* measured temperature, clamped onto this ramp's own 0-255 span -- the
-     * same scale the bars themselves use, so the tick lands where it visually
-     * belongs even when the live reading briefly overshoots a stage's target */
-    if (mf <= s->min_f) mfrac = 0;
-    else if (!s->span || mf >= s->min_f + s->span) mfrac = 255;
-    else mfrac = udiv((mf - s->min_f) * 255, s->span);
-    my = GY_BASE - eq_bar_h(mfrac);
-
-    if (!force && fill == st->drawn_fill && my == st->drawn_meas_y)
-        return;
-
-    rect(x0, GY_TOP, w, GY_BASE - GY_TOP, C_BLACK);       /* this column only */
-    rect(x0, GY_BASE - fill, w, fill, c);                 /* risen so far: solid */
-    rect(x0, y + 2, w, h - fill - 2, dim(c, 80));          /* still to climb */
-    rect(x0, y, w, 2, C_INK);                              /* this stage's target, drawn last */
-    rect(x0, my - 1 < GY_TOP ? GY_TOP : my - 1, w, 3, C_INK);
-    st->drawn_fill = (u8)fill;
-    st->drawn_meas_y = (u8)my;
+    int a = y0 < y1 ? y0 : y1, b = y0 < y1 ? y1 : y0;
+    rect(x, a, 1, b - a + 2, c);
 }
 
-static void draw_eq_full(volatile ramp_state_t *st, scale_t *s)
+/* Redraws chart column c on its own: clear, the goal arc, then the trace if
+ * it has reached this column. Any column can be redrawn alone, which is what
+ * lets the trace's newest point bounce without disturbing the rest. */
+static void draw_column(volatile ramp_state_t *st, scale_t *s, int c)
 {
-    int i, x0, w, h, y;
-    u8 n = st->n_stages, stage = st->stage;
-
-    rect(0, GY_TOP - 4, 240, MID_Y1 - (GY_TOP - 4) + 1, C_BLACK);
-    for (i = 0; i < n; i++) {
-        u16 c = heat(stage_frac(st, s, i));
-        eq_col_x(n, i, &x0, &w);
-        h = eq_bar_h(stage_frac(st, s, i));
-        y = GY_BASE - h;
-        if (i + 1 < stage) {
-            rect(x0, y, w, h, c);                 /* done: solid */
-        } else if (i + 1 > stage) {
-            rect(x0, y, w, 2, c);                  /* not yet reached: outline */
-            rect(x0, y, 2, h, c);
-            rect(x0 + w - 2, y, 2, h, c);
-        }
-        /* i + 1 == stage: drawn by draw_eq_current, called right after */
+    int x = CX0 + c, f = goal_f(st, c), y = temp_y(s, f);
+    int yp = c ? temp_y(s, goal_f(st, c - 1)) : y;
+    rect(x, PY_TOP, 1, PY_BOT - PY_TOP + 2, C_BLACK);
+    join(x, yp, y, heat(temp_frac(s, f)));
+    if (c < st->trace_n) {
+        int ty = st->trace[c], tp = c ? st->trace[c - 1] : ty;
+        join(x, tp, ty, C_INK);
     }
-    rect(EQ_X0, GY_BASE + 1, EQ_X1 - EQ_X0, 1, C_AXIS);
-    draw_eq_current(st, s, 1);
-    st->drawn_stage = stage;
+}
+
+static void draw_chart(volatile ramp_state_t *st, scale_t *s)
+{
+    int c;
+    rect(0, CLEAR_Y, 240, SCREEN_Y1 - CLEAR_Y + 1, C_BLACK);
+    rect(AX_L, AX_TOP, 1, BASE_Y - AX_TOP + 1, C_AXIS);
+    rect(AX_R, AX_TOP, 1, BASE_Y - AX_TOP + 1, C_AXIS);
+    rect(AX_L, BASE_Y, AX_R - AX_L + 1, 1, C_AXIS);
+    for (c = 0; c < RAMP_TRACE_LEN; c++)
+        draw_column(st, s, c);
+    for (c = 0; c < LOGO_RUNS; c++)                /* the logo: one rect per run */
+        rect(LOGO_RUN[c][0], LOGO_Y + (LOGO_RUN[c][2] >> 3), LOGO_RUN[c][1], 1,
+             LOGO_PAL[LOGO_RUN[c][2] & 7]);
+}
+
+/* Records the trace up to "now" and redraws only what changed. Stepping back
+ * a stage moves "now" left: the trace is cut back to it and those columns
+ * redrawn, so the line visibly rewinds with the ramp. */
+static void update_trace(volatile ramp_state_t *st, scale_t *s)
+{
+    int now = now_col(st), y = temp_y(s, FIELD16(OFF_MEAS_F)), c;
+
+    if (st->trace_n > now + 1) {
+        int old = st->trace_n;
+        st->trace_n = (u8)(now + 1);
+        for (c = now + 1; c < old; c++)
+            draw_column(st, s, c);
+    }
+    while (st->trace_n <= now) {
+        st->trace[st->trace_n] = (u8)y;
+        st->trace_n++;
+        draw_column(st, s, st->trace_n - 1);
+    }
+    if (st->trace[now] != y) {                     /* the newest point bounces */
+        st->trace[now] = (u8)y;
+        draw_column(st, s, now);
+    }
+}
+
+/* ---- the dab counter --------------------------------------------------------- */
+
+#define DAB_Y    (LOGO_Y + 3)               /* small digits, y 205-221 */
+#define LABEL_Y  (DAB_Y + 10)               /* "DABS" bottom = the digits' bottom row, y 221 */
+
+static void draw_dabs(volatile ramp_state_t *st, u8 force)
+{
+    volatile u8 *d = (volatile u8 *)DEV_DAB_BASE;
+    u16 v = *(volatile u16 *)(d + (DEV_MODE_IS_CONC() ? 2 : 0)), q, rest;
+    int digit[5], n = 0, x, i;
+    if (!force && v == st->drawn_dabs)
+        return;
+    rest = v;
+    do {                                    /* up to 5 digits, as the stock counter */
+        q = udiv(rest, 10);
+        digit[n++] = rest - q * 10;
+        rest = q;
+    } while (rest && n < 5);
+    rect(LOGO_W + 4, LOGO_Y, 234 - (LOGO_W + 4), LOGO_H, C_BLACK);
+    x = 234 - n * 12;                       /* last digit ends at x 232 */
+    for (i = n - 1; i >= 0; i--, x += 12)
+        small(x, DAB_Y, digit[i], C_INK);
+    x = 234 - n * 12 - 6 - LABEL_W;
+    for (i = 0; i < LABEL_RUNS; i++)
+        rect(x + LABEL_RUN[i][0], LABEL_Y + LABEL_RUN[i][2], LABEL_RUN[i][1], 1, C_TIME);
+    st->drawn_dabs = v;
+}
+
+/* ---- the heat meter --------------------------------------------------------- */
+
+/* an 8 px circle from three rects */
+static void dot(int x, int y, u16 c)
+{
+    rect(x + 2, y, 4, 8, c);
+    rect(x, y + 2, 8, 4, c);
+    rect(x + 1, y + 1, 6, 6, c);
+}
+
+static void draw_meter(volatile ramp_state_t *st, scale_t *s, u8 force)
+{
+    int lit = 1 + udiv(temp_frac(s, FIELD16(OFF_MEAS_F)) * (MTR_N - 1) + 127, 255), i;
+    if (!force && lit == st->drawn_fill)
+        return;
+    for (i = 0; i < MTR_N; i++)
+        dot(MTR_X, MTR_Y0 - i * MTR_PITCH, i < lit ? MTR_C[i] : C_DOT_OFF);
+    st->drawn_fill = (u8)lit;
 }
 
 static void ramp_draw(volatile ramp_state_t *st)
@@ -326,15 +419,16 @@ static void ramp_draw(volatile ramp_state_t *st)
     ramp_scale(st, &s);
 
     if (full)
-        rect(0, ROW_A, 240, MID_Y1 - ROW_A + 1, C_BLACK);
+        rect(0, ROW_A, 240, SCREEN_Y1 - ROW_A + 1, C_BLACK);
     draw_battery(st, full);
     draw_time(st, full);
-    draw_end(st, &s, full);
+    draw_goal(st, &s, full);
     draw_live(st, full);
-    if (full || st->stage != st->drawn_stage)
-        draw_eq_full(st, &s);
-    else
-        draw_eq_current(st, &s, 0);
+    if (full)
+        draw_chart(st, &s);
+    update_trace(st, &s);
+    draw_meter(st, &s, full);
+    draw_dabs(st, full);
     st->frame_drawn = 1;
 }
 
@@ -366,3 +460,7 @@ void ramp_dcac_view(void)
 void ramp_ce70_hide(void) { if (!ramp_active(RAMP_STATE)) orig_ce70(); }
 void ramp_cf58_hide(void) { if (!ramp_active(RAMP_STATE)) orig_cf58(); }
 void ramp_db40_hide(void) { if (!ramp_active(RAMP_STATE)) orig_db40(); }
+void ramp_d048_hide(void) { if (!ramp_active(RAMP_STATE)) orig_d048(); }
+void ramp_e42c_hide(void) { if (!ramp_active(RAMP_STATE)) orig_e42c(); }
+void ramp_e300_hide(void) { if (!ramp_active(RAMP_STATE)) orig_e300(); }
+void ramp_e2b4_hide(void) { if (!ramp_active(RAMP_STATE)) orig_e2b4(); }

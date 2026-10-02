@@ -50,7 +50,14 @@ DEVICES = {
                (0xf39c, 'ramp_dcac_view', 'tjl 0xdcac')],
         hook_all=[('0xce70', 'ramp_ce70_hide', 7),
                   ('0xcf58', 'ramp_cf58_hide', 7),
-                  ('0xdb40', 'ramp_db40_hide', 3)],
+                  ('0xdb40', 'ramp_db40_hide', 3),
+                  # the stock bottom row, y 193-225: dab counter, mode icon,
+                  # status icon, READY banner -- hidden so the ramp screen can
+                  # use it
+                  ('0xd048', 'ramp_d048_hide', 2),
+                  ('0xe42c', 'ramp_e42c_hide', 2),
+                  ('0xe300', 'ramp_e300_hide', 2),
+                  ('0xe2b4', 'ramp_e2b4_hide', 2)],
         own_callers={'0xd3c0': 2, '0xdcac': 2, '0x5618': 1, '0xaf2c': 1}),
     'aeris': dict(
         src=['common/ramp_core.c', 'common/ramp_store.c', 'aeris/ramp_led.c'],

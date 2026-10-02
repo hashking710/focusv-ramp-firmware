@@ -137,7 +137,7 @@ tools/build.py                               build + verification
 
 | Device | Firmware build | Patch sites | Code / waypoint sector |
 | --- | --- | --- | --- |
-| [`carta2/`](carta2/) | PROD-111224 | 24 | 0x30000 / 0x32000 |
+| [`carta2/`](carta2/) | PROD-111224 | 32 | 0x30000 / 0x32000 |
 | [`aeris/`](aeris/) | PROD-111224 | 2 | 0x14000 / 0x15000 |
 | [`sport/`](sport/) | PROD-030426 | 2 | 0x18000 / 0x19000 |
 

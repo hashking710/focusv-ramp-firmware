@@ -2,17 +2,27 @@
  *
  * LAYOUT during a ramp (240 x 240):
  *
- *   y 20   LEFT  battery % + battery icon       RIGHT  current stage target + unit
- *   y 38                                         RIGHT  stage-coloured underline
+ *   y 20   LEFT  battery % + battery icon       RIGHT  end temp (last stage) + unit
+ *   y 38                                         RIGHT  end-temp underline, end-stage colour
  *   y 44   LEFT  session time left (M:SS, large) RIGHT  live temperature (large)
- *   y 78-191     the ramp: one column per stage (filled = done, part-filled =
- *                in progress, outlined = next), dashed line at the stage target,
- *                white line at the measured temperature, underline under the
- *                current stage
+ *   y 78-191     the equalizer, x 142-233: one bar per stage, height + colour both
+ *                from that stage's temperature relative to this ramp's own
+ *                coolest-to-hottest span (never pinned to an absolute 0 deg
+ *                scale, so it reads consistently on a small screen regardless
+ *                of the ramp's real temperatures) -- done = solid, in progress
+ *                = rises from the baseline as the stage does, with a bright cap
+ *                at its target; next = outline only. A white tick on the active
+ *                bar marks the live measured temperature on that same scale.
+ *                x 0-141 is deliberately empty: the equalizer reads as a small
+ *                live instrument, not a full chart, so it doesn't need the rest
+ *                of the row to stay legible.
  *   y 193+ STOCK dab counter + mode icon, or the READY banner once a stage's
  *                temperature is reached
  *
- * Colour language: white = where you are; stage colour = where you're going.
+ * Bars normally grow stage over stage, since a ramp normally heats up; the
+ * exception is the Carta 2's own - button, which steps back to a cooler
+ * stage (ramp_input.c) and so is the one input that visibly makes the active
+ * bar shorter than the one before it.
  *
  * HOOKS. Stock elements whose space this layout uses are hidden only while a
  * ramp is active, at every one of their call sites:
@@ -63,12 +73,21 @@ typedef void (*batt_anim_fn)(int x, int y, int w, int h, int a, int b, int c, in
 
 #define ROW_A    20
 #define ROW_B    44
-#define GX0      6
-#define GW       228
-#define GAP      3
+#define MID_Y1   192
+
+/* the equalizer: x 142-233 (right-aligned to the same x = 233 as the target /
+ * live digits above it), y 78-186 -- the exact pixel box the original full-
+ * width chart proved safe (clear region 0,74,240,118 stays above the stock
+ * dab-counter / READY-banner row at y >= 192, confirmed by decompile; see the
+ * git history for how that boundary was found). Only the box is reused: the
+ * bars inside it are new. */
+#define EQ_X0    142
+#define EQ_X1    233
 #define GY_TOP   78
 #define GY_BASE  186
-#define MID_Y1   192
+#define EQ_GAP   4
+#define MIN_H    14                      /* every bar's visible floor, even at 0 */
+#define MAX_H    (GY_BASE - GY_TOP)       /* height of the hottest stage in this ramp */
 
 static void rect(int x, int y, int w, int h, u16 c)
 {
@@ -104,8 +123,12 @@ static u16 dim(u16 c, int k)
     return (u16)(((((c >> 11) & 31) * k >> 8) << 11) | ((((c >> 5) & 63) * k >> 8) << 5) | ((c & 31) * k >> 8));
 }
 
-/* ---- ramp geometry (F; unit-independent) --------------------------------- */
-typedef struct { int lo, hi, min_f, span; } scale_t;
+/* ---- ramp geometry (F; unit-independent) -----------------------------------
+ * min_f/span are this ramp's OWN coolest-to-hottest stage, never an absolute
+ * temperature scale -- every height and colour below is a 0-255 fraction of
+ * that span, so two ramps with very different real temperatures still fill
+ * the same pixel box the same way. */
+typedef struct { int min_f, span; } scale_t;
 
 static void ramp_scale(volatile ramp_state_t *st, scale_t *s)
 {
@@ -117,30 +140,24 @@ static void ramp_scale(volatile ramp_state_t *st, scale_t *s)
     }
     s->min_f = mn;
     s->span = mx - mn;
-    s->lo = mn - (s->span ? (s->span >> 1) + 15 : 40);
-    s->hi = mx + 5;
 }
-static int temp_y(scale_t *s, int f)
+static u16 stage_frac(volatile ramp_state_t *st, scale_t *s, int i)
 {
-    int y;
-    if (f <= s->lo) return GY_BASE;
-    if (f >= s->hi) return GY_TOP;
-    y = GY_BASE - udiv((f - s->lo) * (GY_BASE - GY_TOP), s->hi - s->lo);
-    return y < GY_TOP ? GY_TOP : y;
+    return s->span ? udiv((WP_F(st, i) - s->min_f) * 255, s->span) : 255;
 }
-static u16 stage_colour(volatile ramp_state_t *st, scale_t *s, int i)
+static int eq_bar_h(u16 frac255)
 {
-    return s->span ? heat(udiv((WP_F(st, i) - s->min_f) * 255, s->span)) : heat(255);
+    return MIN_H + udiv((MAX_H - MIN_H) * frac255, 255);
 }
-static void col_x(volatile ramp_state_t *st, int i, int *x0, int *w)
+/* n equal-width columns across EQ_X0..EQ_X1, same min-width guard as the
+ * previous time-proportional layout (a column must never come out < 1 px
+ * wide, which would make the rects below misbehave). */
+static void eq_col_x(u8 n, int i, int *x0, int *w)
 {
-    int a = GX0 + udiv(GW * stage_start(st, i + 1), st->total_s);
-    int b = (i + 1 == st->n_stages) ? GX0 + GW : GX0 + udiv(GW * stage_start(st, i + 2), st->total_s);
+    int a = EQ_X0 + udiv((EQ_X1 - EQ_X0) * i, n);
+    int b = EQ_X0 + udiv((EQ_X1 - EQ_X0) * (i + 1), n);
     *x0 = a;
-    *w = b - a - GAP;
-    /* a stage that's a tiny share of the ramp still gets a visible column, and
-     * never a width < 1 (which would make every rect / fill below misbehave);
-     * the furthest it can then reach is GX0 + GW - 1 + 2 = 235 < 240 */
+    *w = b - a - EQ_GAP;
     if (*w < 2)
         *w = 2;
 }
@@ -154,21 +171,21 @@ static void draw_battery(volatile ramp_state_t *st, u8 force)
     if (!force && v == st->drawn_batt)
         return;
     split3(v, &h, &t, &o);
-    if (v > 99) { small(GX0, ROW_A, h, C_INK); small(GX0 + 12, ROW_A, t, C_INK); small(GX0 + 24, ROW_A, o, C_INK); }
+    if (v > 99) { small(6, ROW_A, h, C_INK); small(18, ROW_A, t, C_INK); small(30, ROW_A, o, C_INK); }
     else {
         /* clears the 100% layout's third digit AND its '%' (x 42-55), which
          * the 2-digit '%' at x 30-43 only partly covers */
-        rect(GX0 + 24, ROW_A, 30, 17, C_BLACK);
-        if (v > 9) small(GX0, ROW_A, t, C_INK); else rect(GX0, ROW_A, 10, 17, C_BLACK);
-        small(GX0 + 12, ROW_A, o, C_INK);
+        rect(30, ROW_A, 30, 17, C_BLACK);
+        if (v > 9) small(6, ROW_A, t, C_INK); else rect(6, ROW_A, 10, 17, C_BLACK);
+        small(18, ROW_A, o, C_INK);
     }
-    blit(GX0 + (v > 99 ? 36 : 24), ROW_A, 13, 16, 0xff, 0xff, SMALL + G_PCT * 0x22);
+    blit(6 + (v > 99 ? 36 : 24), ROW_A, 13, 16, 0xff, 0xff, SMALL + G_PCT * 0x22);
     if (CHARGING)
-        batt_anim(GX0 + 54, ROW_A, 0x1d, 0x10, 6, 7, 0xff, 0xff, 0x36, 0xa9);
+        batt_anim(6 + 54, ROW_A, 0x1d, 0x10, 6, 7, 0xff, 0xff, 0x36, 0xa9);
     else {
         u16 c = (BATTERY_LOW == 1 || v < 21) ? C_LOW : C_INK;
         int icon = v > 3 ? udiv(v - 1, 20) + 1 : 0;
-        blit(GX0 + 54, ROW_A, 0x1d, 0x10, (u8)(c >> 8), (u8)c, BATT_ICON + icon * 0x44);
+        blit(6 + 54, ROW_A, 0x1d, 0x10, (u8)(c >> 8), (u8)c, BATT_ICON + icon * 0x44);
     }
     st->drawn_batt = v;
 }
@@ -177,14 +194,14 @@ static void draw_battery(volatile ramp_state_t *st, u8 force)
 static void draw_time(volatile ramp_state_t *st, u8 force)
 {
     u16 left = st->last_left, m, s;
-    int x = GX0;
+    int x = 6;
     if (!force && left == st->drawn_left)
         return;
     m = udiv(left, 60);
     s = left - m * 60;
     if (m > 99) m = 99;
     if (force || (m >= 10) != (udiv(st->drawn_left, 60) >= 10))
-        rect(GX0, ROW_B, 84, 24, C_BLACK);
+        rect(6, ROW_B, 84, 24, C_BLACK);
     {
         int mh, mt, mo, sh, stn, so;
         split3(m, &mh, &mt, &mo);
@@ -200,9 +217,13 @@ static void draw_time(volatile ramp_state_t *st, u8 force)
 
 /* ---- right column (right-aligned to x = 233) -------------------------------- */
 
-static void draw_target(volatile ramp_state_t *st, scale_t *s, u8 force)
+/* The ramp's END temperature -- the last stage's target, constant for the
+ * whole ramp -- not the current stage's (the equalizer shows that instead,
+ * as the bar you're currently climbing). Lets you see at a glance where the
+ * whole ramp finishes, next to the live reading right below it. */
+static void draw_end(volatile ramp_state_t *st, scale_t *s, u8 force)
 {
-    u16 v = stage_target_display(st);
+    u16 v = DEV_SCALE_IS_F() ? WP_F(st, st->n_stages - 1) : WP_C(st, st->n_stages - 1);
     if (!force && v == st->drawn_target)
         return;
     int h, t, o;
@@ -212,7 +233,7 @@ static void draw_target(volatile ramp_state_t *st, scale_t *s, u8 force)
     small(195, ROW_A, t, C_INK);
     small(207, ROW_A, o, C_INK);
     blit(219, ROW_A, 14, 16, 0xff, 0xff, SMALL + (G_DEG_C + (DEV_SCALE_IS_F() ? 1 : 0)) * 0x22);
-    rect(183, 38, 51, 2, stage_colour(st, s, st->stage - 1));
+    rect(183, 38, 51, 2, heat(stage_frac(st, s, st->n_stages - 1)));
     st->drawn_target = v;
 }
 
@@ -231,56 +252,71 @@ static void draw_live(volatile ramp_state_t *st, u8 force)
     st->drawn_hero = v;
 }
 
-/* ---- the ramp ------------------------------------------------------------- */
+/* ---- the equalizer ---------------------------------------------------------
+ * One bar per stage, equal width, x 142-233. Height and colour both come from
+ * stage_frac() -- this ramp's own relative heat, 0-255 -- never from an
+ * absolute degree scale, so the box fills the same way regardless of the
+ * ramp's real temperatures. Done stages are solid blocks; the active stage
+ * rises from the baseline as it progresses, capped with a bright tick at its
+ * own target; later stages are outlines only. */
 
-static void draw_current(volatile ramp_state_t *st, scale_t *s, u8 force)
+static void draw_eq_current(volatile ramp_state_t *st, scale_t *s, u8 force)
 {
-    int i = st->stage - 1, x0, w, ty, fill, my;
-    u16 c = stage_colour(st, s, i);
+    int i = st->stage - 1, x0, w, h, y, fill, my;
+    u16 frac = stage_frac(st, s, i);
+    u16 c = heat(frac), mfrac;
     u16 hold = WP_HOLD(st, i), el = ramp_elapsed(st), start = stage_start(st, st->stage);
     u16 into = el > start ? el - start : 0;
+    int mf = FIELD16(OFF_MEAS_F);
 
-    col_x(st, i, &x0, &w);
-    ty = temp_y(s, WP_F(st, i));
-    fill = hold ? udiv(w * (into > hold ? hold : into), hold) : w;
-    my = temp_y(s, FIELD16(OFF_MEAS_F));
+    eq_col_x(st->n_stages, i, &x0, &w);
+    h = eq_bar_h(frac);
+    y = GY_BASE - h;
+    fill = hold ? udiv(h * (into > hold ? hold : into), hold) : h;
+
+    /* measured temperature, clamped onto this ramp's own 0-255 span -- the
+     * same scale the bars themselves use, so the tick lands where it visually
+     * belongs even when the live reading briefly overshoots a stage's target */
+    if (mf <= s->min_f) mfrac = 0;
+    else if (!s->span || mf >= s->min_f + s->span) mfrac = 255;
+    else mfrac = udiv((mf - s->min_f) * 255, s->span);
+    my = GY_BASE - eq_bar_h(mfrac);
+
     if (!force && fill == st->drawn_fill && my == st->drawn_meas_y)
         return;
 
-    rect(x0, GY_TOP, w, GY_BASE - GY_TOP + 1, C_BLACK);
-    rect(x0, ty, fill, GY_BASE - ty + 1, c);
-    rect(x0 + fill, ty, w - fill, GY_BASE - ty + 1, dim(c, 80));
+    rect(x0, GY_TOP, w, GY_BASE - GY_TOP, C_BLACK);       /* this column only */
+    rect(x0, GY_BASE - fill, w, fill, c);                 /* risen so far: solid */
+    rect(x0, y + 2, w, h - fill - 2, dim(c, 80));          /* still to climb */
+    rect(x0, y, w, 2, C_INK);                              /* this stage's target, drawn last */
     rect(x0, my - 1 < GY_TOP ? GY_TOP : my - 1, w, 3, C_INK);
     st->drawn_fill = (u8)fill;
     st->drawn_meas_y = (u8)my;
 }
 
-static void draw_chart(volatile ramp_state_t *st, scale_t *s)
+static void draw_eq_full(volatile ramp_state_t *st, scale_t *s)
 {
-    int i, x0, w, ty, x;
-    u16 cur = stage_colour(st, s, st->stage - 1);
-    int target_y = temp_y(s, WP_F(st, st->stage - 1));
+    int i, x0, w, h, y;
+    u8 n = st->n_stages, stage = st->stage;
 
     rect(0, GY_TOP - 4, 240, MID_Y1 - (GY_TOP - 4) + 1, C_BLACK);
-    for (x = GX0; x < GX0 + GW; x += 6)
-        rect(x, target_y, 3, 1, dim(cur, 150));
-    for (i = 0; i < st->n_stages; i++) {
-        u16 c = stage_colour(st, s, i);
-        col_x(st, i, &x0, &w);
-        ty = temp_y(s, WP_F(st, i));
-        if (i + 1 < st->stage) {
-            rect(x0, ty, w, GY_BASE - ty + 1, c);
-        } else if (i + 1 > st->stage) {
-            rect(x0, ty, w, 2, c);
-            rect(x0, ty, 2, GY_BASE - ty + 1, c);
-            rect(x0 + w - 2, ty, 2, GY_BASE - ty + 1, c);
+    for (i = 0; i < n; i++) {
+        u16 c = heat(stage_frac(st, s, i));
+        eq_col_x(n, i, &x0, &w);
+        h = eq_bar_h(stage_frac(st, s, i));
+        y = GY_BASE - h;
+        if (i + 1 < stage) {
+            rect(x0, y, w, h, c);                 /* done: solid */
+        } else if (i + 1 > stage) {
+            rect(x0, y, w, 2, c);                  /* not yet reached: outline */
+            rect(x0, y, 2, h, c);
+            rect(x0 + w - 2, y, 2, h, c);
         }
+        /* i + 1 == stage: drawn by draw_eq_current, called right after */
     }
-    rect(GX0, GY_BASE + 1, GW, 1, C_AXIS);
-    col_x(st, st->stage - 1, &x0, &w);
-    rect(x0, GY_BASE + 3, w, 3, cur);
-    draw_current(st, s, 1);
-    st->drawn_stage = st->stage;
+    rect(EQ_X0, GY_BASE + 1, EQ_X1 - EQ_X0, 1, C_AXIS);
+    draw_eq_current(st, s, 1);
+    st->drawn_stage = stage;
 }
 
 static void ramp_draw(volatile ramp_state_t *st)
@@ -293,12 +329,12 @@ static void ramp_draw(volatile ramp_state_t *st)
         rect(0, ROW_A, 240, MID_Y1 - ROW_A + 1, C_BLACK);
     draw_battery(st, full);
     draw_time(st, full);
-    draw_target(st, &s, full || st->stage != st->drawn_stage);
+    draw_end(st, &s, full);
     draw_live(st, full);
     if (full || st->stage != st->drawn_stage)
-        draw_chart(st, &s);
+        draw_eq_full(st, &s);
     else
-        draw_current(st, &s, 0);
+        draw_eq_current(st, &s, 0);
     st->frame_drawn = 1;
 }
 

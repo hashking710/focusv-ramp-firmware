@@ -54,15 +54,15 @@ WAYPOINT_SECTOR = 0x19000
 IMAGE_END_ADDR = 0x20000
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_v1.bin"   # built locally, never published
-BLOB_SHA256 = "2317ce783b4098f08c0b84016a56e37b90ec0e80e02394eb70642837bf549d56"   # written by tools/build.py
+BLOB_SHA256 = "025d9945c4f3f4cf4d13e24474a587f680a42fe0baf3ea1c799132dec93f70cb"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock
 # instruction; each replacement is the real assembler's `tjl` to the named
 # function in the blob above.
 PATCHES = [
-    (0x58B0, bytes.fromhex("0290a699"), bytes.fromhex("12902d9c")),  # tjl 0x7c00 -> ramp_trampoline
-    (0xB002, bytes.fromhex("35a3fb1c"), bytes.fromhex("0d90c99b")),  # tmovs r3, #53 -> ramp_marker_entry
+    (0x58B0, bytes.fromhex("0290a699"), bytes.fromhex("12902f9c")),  # tjl 0x7c00 -> ramp_trampoline
+    (0xB002, bytes.fromhex("35a3fb1c"), bytes.fromhex("0d90cb9b")),  # tmovs r3, #53 -> ramp_marker_entry
 ]
 
 

@@ -135,6 +135,9 @@ typedef void (*flash_write_fn)(int addr, int len, void *buf);
 /* ---- dab counting threshold ---------------------------------------------- */
 #define COUNT_AT_STAGE 3
 
+/* Carta 2 chart width in columns (see carta2/ramp_display.c) */
+#define RAMP_TRACE_LEN 210
+
 /* ---- runtime state (non-retention SRAM; magic-checked, never trusted at
  * power-on) ------------------------------------------------------------------ */
 typedef struct {
@@ -157,6 +160,9 @@ typedef struct {
     u16 drawn_hero;
     u16 drawn_left;
     u16 drawn_target;
+    u16 drawn_dabs;   /* Carta 2: the dab count last drawn */
+    u8  trace_n;      /* Carta 2 chart: measured-temperature samples recorded */
+    u8  trace[RAMP_TRACE_LEN];   /* one y per chart column, from ramp start */
     u16 wp[RAMP_NUM_SLOTS][3];   /* this ramp's stages {F, C, hold_s}, copied at arm */
 } ramp_state_t;
 

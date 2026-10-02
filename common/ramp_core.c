@@ -138,6 +138,7 @@ static void try_arm(volatile ramp_state_t *st)
     st->saved_c = c;
     st->counted = 0;
     st->frame_drawn = 0;
+    st->trace_n = 0;
     FIELD16(OFF_COUNTDOWN) = total;
     st->last_left = total;
     apply_stage(st, 1);

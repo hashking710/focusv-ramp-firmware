@@ -52,5 +52,31 @@ The code goes at flash 0x14000 and runs at 0x14028. The waypoint store has its o
 
 Every address in [`device.h`](device.h) is listed with the stock code that proves what it means.
 
-**Not verifiable from the firmware file:** that nothing else on the device uses flash
-0x14000–0x15fff, which lies past the end of the stock image. Only a hardware test confirms it.
+## Reverting, and OTA compatibility
+
+Traced directly (the BLE attribute table, by the OTA characteristic's own UUID, down to the
+write handler and the flash call it makes):
+
+- **The stock OTA write path is completely separate from this patch.** It lives at
+  0x116cc-0x1354c -- the GATT attribute table, the write handler, and its CRC check -- entirely
+  below this patch's own code at 0x14000+, with the stock image's real end (0x13b2c) in between.
+  This patch touches none of it: not the attribute table, not the write handler, not the two
+  stock functions (0x8154, the marker chain) it hooks have anything to do with OTA. An update
+  should work exactly as it does on stock firmware.
+- **The write handler confirms the mechanism**: each 16-byte block from the app is written with
+  the same verified-write primitive this patch itself uses (`0xa5c`, `DEV_FLASH_WRITE`), at
+  `block_sequence * 16 + base`. That `base` is a per-session value set by the OTA START command,
+  not a fixed address visible in the disassembly -- so while nothing in the code ties it to
+  0x14000-0x1fff, this file stops short of a confirmed address for it.
+- **Reverting is a property of the patch sites, not of this patch's own flash region.** The patch
+  changes behaviour only through its 2 call-site swaps (0x6464, 0xb490). Any OTA update that
+  writes a real stock image necessarily overwrites that low flash range -- it's where the firmware
+  itself begins -- restoring those two sites to their original bytes. Once that's true, nothing on
+  the device calls into this patch's code again, regardless of what happens to the leftover bytes
+  at 0x14000+. Flashing the original stock file back, by any method, is a full, working revert.
+
+**Not independently verified:** whether an OTA update's `base` ever lands inside 0x14000-0x1fff,
+which would overwrite this patch's own code and waypoint store mid-update (harmless -- see above
+-- but not confirmed either way), and whether anything else on the device uses that flash range at
+all. Both are open questions in focusv-ble-research (issues #3, #4); only a hardware test, or
+finishing that trace, settles them.

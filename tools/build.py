@@ -243,6 +243,23 @@ def main():
         check(out[8:12] == b'KNLT' and out[:24] == stock[:24], 'header intact')
         check(len(out) == D['end'] + 4, f'image covers exactly flash 0..{D["end"]:#x} (+ trailer): no sector past it is touched')
 
+        print(f'== {a.device}: independent decode ==')
+        # The checks above decode each site with tjl_lands(); this re-reads the
+        # FINISHED image with the real disassembler instead, as a cross-check.
+        open(f'{work}/final_body.bin', 'wb').write(out[HDR:-4])
+        fdis = run_tc32(a.toolchain, work, 'tc32-elf-objdump -D -b binary -m tc32 /work/final_body.bin')
+        fins = {}
+        for l in fdis.splitlines():
+            m = re.match(r'\s*([0-9a-f]+):\t[0-9a-f ]+\t(\S+)\t?(.*)', l)
+            if m:
+                fins[int(m.group(1), 16)] = (m.group(2), m.group(3).split(';')[0].strip())
+        bad = []
+        for x, w, _, _, _ in table:
+            op, arg = fins.get(x, ('?', '?'))
+            if op != 'tjl' or not arg or int(arg.split()[0], 16) != sym[w] - BASE:
+                bad.append(f'{x:#x}: {op} {arg}')
+        check(not bad, f'objdump of the finished image: all {len(table)} sites are tjl to their function (bad: {bad or "none"})')
+
         print(f'== {a.device}: refusals ==')
         def refuses(fw_bytes, label, blob_override=None):
             fw, o = f'{work}/neg_in.bin', f'{work}/neg_out.bin'

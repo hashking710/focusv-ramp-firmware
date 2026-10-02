@@ -1,37 +1,15 @@
 # focusv-ramp-firmware
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![Status: DO NOT FLASH](https://img.shields.io/badge/status-DO%20NOT%20FLASH-red.svg)
+![Status: untested on hardware](https://img.shields.io/badge/status-untested%20on%20hardware-orange.svg)
 ![Not affiliated with Focus V](https://img.shields.io/badge/affiliation-independent%2C%20unofficial-lightgrey.svg)
 
-> [!CAUTION]
-> **Do not flash any patch in this repository yet. None of them has run on real hardware.**
->
-> Earlier versions published here had two separate bugs, each of which would have crashed the
-> device on its first tick after boot and left it in a reset loop that can't be recovered over
-> Bluetooth (recovery needs SWire hardware):
->
-> 1. **Even call targets.** Calls into stock code compile to `tjex`, which treats bit 0 of the
->    target like Arm's `bx` does, so the target must be odd. The patches passed even addresses.
-> 2. **The 0x28 image offset.** Code runs at its disassembly address **+ 0x28**: the 40-byte
->    firmware header sits at flash 0 and the body follows it. The bootloader's reset branch, and
->    every callback pointer the stock firmware stores, prove it. The patches called and linked
->    everything 0x28 bytes too low.
->
-> The same audits also found:
->
-> - Carta 2: a flash-write address left over from an older build. In this build it points into
->   the middle of a function.
-> - Carta 2: the flower/concentrate flag the patch read was actually the °F/°C setting.
-> - Stage targets were overwritten by stock code before the heater ever used them.
-> - Marker hook: it clobbered a register the stock code still needed.
-> - Aeris: the patch force-enabled LEDs the user had switched off.
-> - Carta Sport: the waypoint store sat on top of the patch's own code.
-> - Carta Sport: Celsius was read as Fahrenheit.
->
-> All of this is fixed in the current source, and every build passes the checks below.
-> Those checks prove the bytes are right, not how the device behaves. This notice stays until each
-> patch has been bench-tested on hardware. No one is known to have flashed any version.
+> [!WARNING]
+> **Not yet tested on real hardware.** Every patch passes the build's full verification and an
+> independent disassembler cross-check, but that proves the bytes are right, not how a device
+> behaves. Flash only a device you can recover over SWire (see focusv-ble-research's
+> [hardware guide](https://github.com/hashking710/focusv-ble-research/blob/main/docs/hardware-setup.md)),
+> and keep your original firmware file. Bench-test reports are the most useful contribution right now.
 
 Independent, hobbyist firmware patches that add an autonomous temperature ramp to Focus V's
 Carta 2, Aeris and Carta Sport. You build a ramp in [Terpline](https://terpline.app) and upload
@@ -112,6 +90,8 @@ stops it:
   - the blob is placed exactly at its address, with 0xFF filling the gap before it
   - the waypoint sector ships erased, and no flash sector past the image is touched
   - the header length and Telink CRC32 are correct
+- the finished image is re-disassembled with the real `tc32-elf-objdump`, and every site must
+  decode to a call to its function: an independent cross-check of the build's own decoder
 - `apply_patch.py` **refuses**, writing nothing, when given: an altered patch site, a one-bit
   different build, a truncated file, or a mismatched code blob
 
@@ -140,6 +120,30 @@ tools/build.py                               build + verification
 | [`carta2/`](carta2/) | PROD-111224 | 32 | 0x30000 / 0x32000 |
 | [`aeris/`](aeris/) | PROD-111224 | 2 | 0x14000 / 0x15000 |
 | [`sport/`](sport/) | PROD-030426 | 2 | 0x18000 / 0x19000 |
+
+## History
+
+Earlier versions published here had two separate bugs, each of which would have crashed the
+device on its first tick after boot:
+
+1. **Even call targets.** Calls into stock code compile to `tjex`, which treats bit 0 of the
+   target like Arm's `bx` does, so the target must be odd. The patches passed even addresses.
+2. **The 0x28 image offset.** Code runs at its disassembly address + 0x28: the 40-byte firmware
+   header sits at flash 0 and the body follows it. The patches called and linked everything 0x28
+   bytes too low.
+
+The same audits also found:
+
+- Carta 2: a flash-write address left over from an older build.
+- Carta 2: the flower/concentrate flag the patch read was actually the °F/°C setting.
+- Stage targets were overwritten by stock code before the heater ever used them.
+- Marker hook: it clobbered a register the stock code still needed.
+- Aeris: the patch force-enabled LEDs the user had switched off.
+- Carta Sport: the waypoint store sat on top of the patch's own code.
+- Carta Sport: Celsius was read as Fahrenheit.
+
+All of these are fixed, and `tools/build.py` now checks for each class of mistake on every build.
+No one is known to have flashed any earlier version.
 
 ## Reverting
 

@@ -54,7 +54,7 @@ WAYPOINT_SECTOR = 0x19000
 IMAGE_END_ADDR = 0x20000
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_v1.bin"   # built locally, never published
-BLOB_SHA256 = "025d9945c4f3f4cf4d13e24474a587f680a42fe0baf3ea1c799132dec93f70cb"   # written by tools/build.py
+BLOB_SHA256 = "7deda12bf6caedce9ba02b11e2095547c6275761a1f087f70693f291ad02f9d3"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock

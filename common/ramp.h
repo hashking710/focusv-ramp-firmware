@@ -109,6 +109,28 @@ typedef void (*flash_write_fn)(int addr, int len, void *buf);
 #define flash_erase  STOCK_FN(flash_erase_fn, DEV_FLASH_ERASE)
 #define flash_write  STOCK_FN(flash_write_fn, DEV_FLASH_WRITE)
 
+/* ---- the ramp system's own on/off switch -----------------------------------
+ * One more byte in the same flash sector as the waypoints (see
+ * ramp_toggle_enabled in ramp_store.c), toggled by a quadruple-click on the
+ * device's single button on Aeris and Sport -- the same stock counter that
+ * cycles the user's LED preset (0-5), which lands on exactly 4 after four
+ * clicks; see each device's ramp_click_entry.s. Erased flash (0xFF) or
+ * anything non-zero means enabled, so a store from before this existed, or
+ * one that's never been touched, behaves exactly as it always has. */
+#define RAMP_ENABLED_OFFSET  RAMP_STORE_SIZE
+#define RAMP_STORE_TOTAL     (RAMP_STORE_SIZE + 2)   /* +1 flag, +1 reserved */
+
+static inline u8 ramp_enabled(void)
+{
+    u8 b;
+    /* flash_read, not memory-mapped: the toggle that writes this byte can
+     * fire on the tick right before this is checked (click -> this tick's
+     * ramp_tick), which is exactly the stale-mapped-read window described
+     * above -- so this follows the same rule as the rest of the store. */
+    flash_read(DEV_RAMP_FLASH + RAMP_ENABLED_OFFSET, 1, &b);
+    return b != 0;
+}
+
 /* the armed ramp's stages, from its RAM copy (0-based stage index) */
 #define WP_F(st, s)     ((st)->wp[s][0])
 #define WP_C(st, s)     ((st)->wp[s][1])

@@ -18,16 +18,22 @@
  */
 #include "ramp.h"
 
+/* RAMP_STORE_TOTAL throughout, not RAMP_STORE_SIZE: this reads/writes the
+ * enabled-flag byte too (see ramp.h), so a save never clobbers it back to
+ * erased. A store written by a version of this patch before that flag
+ * existed reads it as 0xFF regardless -- NOR flash leaves anything past
+ * what was actually written at its erased value -- so this needs no
+ * migration: an old store is simply read as "enabled", the existing default. */
 static void save_waypoint(u8 bank, u8 slot, u16 f, u16 c, u16 hold)
 {
-    u8 buf[RAMP_STORE_SIZE];
+    u8 buf[RAMP_STORE_TOTAL];
     u8 *p;
     int i;
 
     /* NOR flash: read the whole store, erase the sector, write it back */
-    flash_read(DEV_RAMP_FLASH, RAMP_STORE_SIZE, buf);
+    flash_read(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, buf);
     if (buf[0] != (u8)RAMP_STORE_MAGIC || buf[1] != (u8)(RAMP_STORE_MAGIC >> 8)) {
-        for (i = 0; i < RAMP_STORE_SIZE; i++)   /* first save, or an older layout */
+        for (i = 0; i < RAMP_STORE_TOTAL; i++)   /* first save, or an older layout */
             buf[i] = 0xff;
         buf[0] = (u8)RAMP_STORE_MAGIC;
         buf[1] = (u8)(RAMP_STORE_MAGIC >> 8);
@@ -47,13 +53,15 @@ static void save_waypoint(u8 bank, u8 slot, u16 f, u16 c, u16 hold)
     p[4] = (u8)hold; p[5] = (u8)(hold >> 8);
 
     flash_erase(DEV_RAMP_FLASH);
-    flash_write(DEV_RAMP_FLASH, RAMP_STORE_SIZE, buf);
+    flash_write(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, buf);
 }
 
 void ramp_marker_dispatch(u8 marker)
 {
     if (ramp_active(RAMP_STATE))
         return;   /* never rewrite the store under a running ramp */
+    if (!ramp_enabled())
+        return;   /* disabled: no flash write of any kind, full stop */
 
     if (marker >= 0xb1 && marker <= 0xb5)
         save_waypoint(0, marker - 0xb1, *PRESET(TBL_FL_F, 0), *PRESET(TBL_FL_C, 0),
@@ -61,4 +69,44 @@ void ramp_marker_dispatch(u8 marker)
     else if (marker >= 0xb6 && marker <= 0xba)
         save_waypoint(1, marker - 0xb6, *PRESET(TBL_CO_F, 0), *PRESET(TBL_CO_C, 0),
                       *PRESET(TBL_CO_HOLD, 0));
+}
+
+/* Flips the enabled byte via the exact same read-whole-sector / erase /
+ * write-back cycle save_waypoint() uses, so it can never land on a half
+ * state. Called only from a device's ramp_click_entry.s, on a quadruple
+ * click of its single button -- see ramp_enabled() in ramp.h. */
+void ramp_toggle_enabled(void)
+{
+    u8 buf[RAMP_STORE_TOTAL];
+    int i;
+
+    flash_read(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, buf);
+    if (buf[0] != (u8)RAMP_STORE_MAGIC || buf[1] != (u8)(RAMP_STORE_MAGIC >> 8)) {
+        for (i = 0; i < RAMP_STORE_TOTAL; i++)
+            buf[i] = 0xff;
+        buf[0] = (u8)RAMP_STORE_MAGIC;
+        buf[1] = (u8)(RAMP_STORE_MAGIC >> 8);
+    }
+    buf[RAMP_ENABLED_OFFSET] = buf[RAMP_ENABLED_OFFSET] != 0 ? 0 : 0xff;
+
+    flash_erase(DEV_RAMP_FLASH);
+    flash_write(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, buf);
+}
+
+/* Called from ramp_click_entry.s every click in place of the two stock
+ * instructions that increment and store the LED-preset counter (0-5) --
+ * base/off together are that field's address, so this replicates them
+ * exactly first. 1-3 then return having done nothing else -- LED preset
+ * cycling still works normally. Landing on 4 is repurposed: instead of
+ * selecting whichever LED preset 4 happens to be (the user doesn't want
+ * that kept), it toggles the ramp system and resets the counter to 0,
+ * matching "0 = LEDs off" so preset 4 is never actually applied. */
+void ramp_click_dispatch(volatile u8 *base, u8 off)
+{
+    u8 count = (u8)(base[off] + 1);
+    base[off] = count;
+    if (count != 4)
+        return;
+    base[off] = 0;
+    ramp_toggle_enabled();
 }

@@ -118,7 +118,7 @@ static void try_arm(volatile ramp_state_t *st)
         return;
     f = *PRESET(bank ? TBL_CO_F : TBL_FL_F, rank);
     c = *PRESET(bank ? TBL_CO_C : TBL_FL_C, rank);
-    if (!IS_SENTINEL(f, c) || st->arm_failed)
+    if (!IS_SENTINEL(f, c) || st->arm_failed || !ramp_enabled())
         return;
     n = load_stages(st, bank);
     if (n == 0) {

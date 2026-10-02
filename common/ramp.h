@@ -171,6 +171,7 @@ typedef struct {
     u16 last_left;    /* the ramp's own view of the countdown -- see ramp_core.c */
     u8  counted;      /* stock completion bookkeeping already run this session */
     u8  arm_failed;   /* this session's sentinel found no usable store */
+    u8  hold_flags;   /* Carta 2 only: +/- held-together toggle (ramp_input.c) */
     u8  frame_drawn;  /* display bookkeeping (Carta 2 screen) */
     u8  drawn_fill;
     u8  drawn_meas_y;
@@ -215,5 +216,6 @@ static inline u16 stage_target_display(volatile ramp_state_t *st)
 }
 
 void ramp_step(volatile ramp_state_t *st, int dir);
+void ramp_toggle_enabled(void);
 
 #endif

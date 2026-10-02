@@ -76,6 +76,30 @@ The patch hooks the only call to the stock button-event consumer (0x5618):
 
 Outside a ramp, every event goes to the stock consumer unchanged.
 
+## On/off switch: hold + and − together
+
+Hold + and − down at the same time, any time (not only during a ramp), to toggle the whole ramp
+system on or off, directly on the device, no app needed -- the same feature Aeris and Sport get
+from a quadruple click of their single button:
+
+- **Off**: no new ramp can arm, and no new waypoint can be saved -- a stage-save packet is
+  dropped with no flash write at all, the same as on stock firmware. A ramp already running
+  finishes or stops normally; it isn't interrupted.
+- **On**: back to normal.
+
+It's stored as one more byte in the same flash sector as the waypoints, so it survives a power
+cycle, and is shared with the Aeris/Sport toggle's own flag layout. A device that's never had this
+toggled reads as **on** -- today's behaviour, unchanged.
+
+The Carta 2 has no single click-counter like Aeris/Sport's LED preset cycle, so this doesn't reuse
+that mechanism. It instead watches the same + / − press and held events the existing stage-stepping
+feature above already consumes: holding − sets one flag, holding + sets the other (either one's own
+short-press or held/auto-repeat event counts as "held"; any other event clears both), and the
+instant both are set, it toggles and clears them. The combo is only ever *read*, never consumed --
+real hardware testing confirmed holding + and − together (or all three buttons) does nothing
+visible on stock firmware, and this patch doesn't change that: whatever stock does, or doesn't do,
+with + or − individually is completely unaffected, during a ramp or not.
+
 ## Patch sites (32, all written and checked by `tools/build.py`)
 
 | Site(s) | Stock call | Replaced with |

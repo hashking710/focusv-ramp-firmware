@@ -1,0 +1,195 @@
+/* ramp.h -- shared core of the on-device ramp patch (Carta 2, Aeris, Carta Sport).
+ *
+ * The three devices run the same logic; they differ only in addresses, field
+ * offsets and flag polarities, which each device supplies in its own device.h.
+ * Every value in a device.h was confirmed by reading the stock code that
+ * CONSUMES it (the PID step, the orchestrator, the session timer), not inferred
+ * from where values come from -- the earlier per-device copies of this logic got
+ * field meanings wrong on two devices exactly that way.
+ *
+ * HOW A RAMP RUNS -- by reusing stock mechanisms rather than fighting them:
+ *
+ *  Arming. The app starts a normal session at a sentinel temperature (150 F /
+ *  65 C) on any preset slot. The first tick that sees it arms the ramp, if
+ *  waypoints are saved for the active mode.
+ *
+ *  Target. Each stock orchestrator reloads the PID target pair (C and F) from
+ *  the active preset slot every tick while the "reached" flag is 0, before the
+ *  PID step runs -- so the target fields themselves can't be written. Each stage
+ *  instead writes the active slot (both units) and clears "reached", the same
+ *  thing the stock firmware does to change temperature mid-session. The stock
+ *  heat-up, ready cue and PID then run per stage. The slot's original contents
+ *  are restored when the session ends.
+ *
+ *  Time. The stock session countdown (real seconds) is set to the ramp's total
+ *  length, and the current stage is derived from it. Timing is in the device's
+ *  own seconds, and the stock session-length limit never cuts a ramp short:
+ *  between ticks the countdown may only stay put or drop by one second, and any
+ *  other change (a stock reload from the slot's hold time) is undone. The slot's
+ *  hold time itself is never touched. (On Aeris and Sport the stock clock only
+ *  runs once the target is reached, so each hold is time AT temperature; on the
+ *  Carta 2 it runs from the start of each stage.)
+ *
+ *  Dab counting. On first entering stage 3 the stock completion counter
+ *  increments run once, so the official app's counters report it at once; the
+ *  stock save arming that persists them runs when the ramp ends, after the slot
+ *  is restored, so no save can capture the ramp's temporary stage temperature.
+ *  A counted ramp ends one second early through the stock stop and end cue
+ *  WITHOUT the completion bookkeeping, so it is never counted twice. Ramps with
+ *  fewer than 3 stages are counted by the stock completion as usual. A ramp
+ *  stopped before stage 3 is not counted, exactly as a stopped stock session
+ *  isn't.
+ *
+ *  Safeguards. Waypoints are copied to RAM through the stock SPI read when a
+ *  ramp arms and must all pass a range / consistency check (official-app
+ *  limits) or the session runs as a plain stock session. The running state is
+ *  checked every tick, and nothing restores a preset slot from state this code
+ *  didn't provably write. The stock PID, heat-up and every stock stop path
+ *  stay in charge of the heater throughout.
+ */
+#ifndef RAMP_H
+#define RAMP_H
+
+typedef unsigned char  u8;
+typedef unsigned short u16;
+typedef unsigned int   u32;
+
+#include "device.h"
+
+/* ---- addresses ------------------------------------------------------------
+ * Every code address in a device.h is a DISASSEMBLY address (the image with its
+ * 40-byte header stripped, as Ghidra and objdump show it). On the device the
+ * header occupies flash 0x00-0x27 and the body follows, so code actually runs
+ * at disassembly address + 0x28. Proof: the header's reset branch (56 80) lands
+ * on physical 0xb0 = disassembly 0x88 + 0x28, and every callback pointer the
+ * stock firmware stores (0x14dd, 0x165cd, 0x17589 on the Carta 2) points 0x28
+ * past a real function entry, with bit 0 set.
+ *
+ * Calls into stock code compile to `tjex rN`, which on TC32 behaves like Arm
+ * `bx`: bit 0 of the target is an instruction-set flag and must be set (the
+ * toolchain emits addr|1 for its own functions, as the stock pointers above do).
+ *
+ * So every call into stock code goes through STOCK_FN: + 0x28, then | 1.
+ * Data addresses copied from stock literal pools (glyph tables, icons) are
+ * already runtime addresses and are used as-is; RAM addresses need neither.
+ * The patch's own code is linked at its runtime address (see tools/build.py). */
+#define IMAGE_BASE            0x28u
+#define STOCK_FN(type, addr)  ((type)(((u32)(addr) + IMAGE_BASE) | 1u))
+
+typedef void  (*void_fn)(void);
+typedef short (*rom_div_fn)(int, int);
+#define rom_div         STOCK_FN(rom_div_fn, DEV_ROM_DIV)
+#define orig_pid_tick   STOCK_FN(void_fn, DEV_PID_TICK)
+#define stock_stop      STOCK_FN(void_fn, DEV_STOP)
+
+/* ---- the central struct ------------------------------------------------- */
+#define STRUCT_BASE    ((volatile u8 *)DEV_STRUCT)
+#define FIELD16(off)   (*(volatile u16 *)(STRUCT_BASE + (off)))
+#define PRESET(base, rank)  ((volatile u16 *)(STRUCT_BASE + DEV_PRESET_OFF(base, rank)))
+
+/* ---- waypoint store (flash) ------------------------------------------------
+ * [u16 magic][bank 0: 5 x {u16 F, u16 C, u16 hold_s}][bank 1: same]
+ * bank 0 = flower (markers 0xB1-0xB5), bank 1 = concentrate (0xB6-0xBA).
+ *
+ * Always accessed through the stock SPI flash routines, never memory-mapped:
+ * mapped reads go through the flash cache and could return stale data just
+ * after a save. A ramp copies its bank into RAM (ramp_state_t.wp) once, when it
+ * arms, validates it there, and runs from that copy -- so a save during a
+ * running ramp can't change it either. */
+#define RAMP_STORE_MAGIC   0xA52B
+#define RAMP_NUM_BANKS     2
+#define RAMP_NUM_SLOTS     5
+#define RAMP_SLOT_SIZE     6
+#define RAMP_STORE_SIZE    (2 + RAMP_NUM_BANKS * RAMP_NUM_SLOTS * RAMP_SLOT_SIZE)
+
+typedef void (*flash_read_fn)(int addr, int len, void *buf);
+typedef void (*flash_erase_fn)(int addr);
+typedef void (*flash_write_fn)(int addr, int len, void *buf);
+#define flash_read   STOCK_FN(flash_read_fn, DEV_FLASH_READ)
+#define flash_erase  STOCK_FN(flash_erase_fn, DEV_FLASH_ERASE)
+#define flash_write  STOCK_FN(flash_write_fn, DEV_FLASH_WRITE)
+
+/* the armed ramp's stages, from its RAM copy (0-based stage index) */
+#define WP_F(st, s)     ((st)->wp[s][0])
+#define WP_C(st, s)     ((st)->wp[s][1])
+#define WP_HOLD(st, s)  ((st)->wp[s][2])
+
+/* ---- arming sentinel: 150 F, or the stock C conversion of it (65; 66 if a
+ * build rounds). Real presets never go below 275 F / 135 C. --------------- */
+#define SENTINEL_F     150
+#define IS_SENTINEL(f, c)  ((f) == SENTINEL_F || (c) == 65 || (c) == 66)
+
+/* ---- preset slots: custom (rank 0) + 5, on every device ---------------- */
+#define RAMP_MAX_RANK  5
+
+/* ---- waypoint sanity (see count_stages): the official app's own limits --
+ * flower 275-500 F, concentrate 365 F to the device's ceiling (DEV_MAX_F in
+ * device.h), at most 300 s per stage (stock maximum 240 s). A store holding
+ * anything outside these never arms. ---------------------------------------- */
+#define RAMP_FL_MIN_F  275
+#define RAMP_FL_MAX_F  500
+#define RAMP_CO_MIN_F  365
+#define RAMP_CO_MAX_F  DEV_MAX_F
+#define RAMP_MAX_HOLD  300
+
+/* ---- dab counting threshold ---------------------------------------------- */
+#define COUNT_AT_STAGE 3
+
+/* ---- runtime state (non-retention SRAM; magic-checked, never trusted at
+ * power-on) ------------------------------------------------------------------ */
+typedef struct {
+    u16 magic;
+    u8  stage;        /* 0 = idle; 1..n_stages = active */
+    u8  n_stages;
+    u8  bank;         /* 0 flower / 1 concentrate, locked at arm time */
+    u8  rank;         /* preset slot the session was started from */
+    u16 total_s;      /* sum of stage holds, seconds */
+    u16 saved_f;      /* that slot's original contents (the sentinel), */
+    u16 saved_c;      /*   restored when the session ends */
+    u16 last_left;    /* the ramp's own view of the countdown -- see ramp_core.c */
+    u8  counted;      /* stock completion bookkeeping already run this session */
+    u8  arm_failed;   /* this session's sentinel found no usable store */
+    u8  frame_drawn;  /* display bookkeeping (Carta 2 screen) */
+    u8  drawn_stage;
+    u8  drawn_fill;
+    u8  drawn_meas_y;
+    u8  drawn_batt;
+    u16 drawn_hero;
+    u16 drawn_left;
+    u16 drawn_target;
+    u16 wp[RAMP_NUM_SLOTS][3];   /* this ramp's stages {F, C, hold_s}, copied at arm */
+} ramp_state_t;
+
+#define RAMP_MAGIC     0xA5C9
+#define RAMP_STATE     ((volatile ramp_state_t *)DEV_RAMP_STATE)
+
+static inline u8 ramp_active(volatile ramp_state_t *st)
+{
+    return st->magic == RAMP_MAGIC && st->stage != 0 && st->stage <= st->n_stages;
+}
+
+static inline u16 ramp_elapsed(volatile ramp_state_t *st)
+{
+    u16 left = st->last_left;
+    return left >= st->total_s ? 0 : (u16)(st->total_s - left);
+}
+
+/* Seconds from ramp start to the start of a 1-based stage. */
+static inline u16 stage_start(volatile ramp_state_t *st, u8 stage)
+{
+    u16 t = 0;
+    u8 i;
+    for (i = 1; i < stage; i++)
+        t += WP_HOLD(st, i - 1);
+    return t;
+}
+
+/* Current target in the device's display unit. */
+static inline u16 stage_target_display(volatile ramp_state_t *st)
+{
+    return DEV_SCALE_IS_F() ? WP_F(st, st->stage - 1) : WP_C(st, st->stage - 1);
+}
+
+void ramp_step(volatile ramp_state_t *st, int dir);
+
+#endif

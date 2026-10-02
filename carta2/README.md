@@ -2,6 +2,9 @@
 
 # Carta 2 ("Quantum") ramp patch
 
+> [!CAUTION]
+> **Do not flash this patch.** A crash-on-boot bug class was found in all three patches — see the [warning in the main README](../README.md). Fixes are in progress.
+
 Adds an autonomous, on-device temperature ramp to the Carta 2's stock firmware: save up to
 5 temperature/hold-duration waypoints, arm the ramp, and the device walks through them on its
 own — no phone connected, nothing to keep open. While a ramp is running, the normal single-number

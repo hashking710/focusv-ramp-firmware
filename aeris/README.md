@@ -2,6 +2,9 @@
 
 # Aeris ramp patch
 
+> [!CAUTION]
+> **Do not flash this patch.** A crash-on-boot bug class was found in all three patches — see the [warning in the main README](../README.md). Fixes are in progress.
+
 Adds the same autonomous, on-device temperature ramp as the Carta 2 patch, adapted to Aeris's
 different firmware. Aeris has no screen, so progress shows as a live color gradient across its 4
 RGB LEDs (cool blue → hot amber, based on measured temperature) instead of an on-screen graph.

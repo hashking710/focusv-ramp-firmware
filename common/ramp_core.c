@@ -72,9 +72,13 @@ static u8 wp_sane(u8 bank, u16 f, u16 c, u16 hold)
     return f >= lo && f <= hi && d >= -18 && d <= 18 && hold <= RAMP_MAX_HOLD;
 }
 
+#define STORE_UNUSABLE 0xff
+
 /* Loads the bank's waypoints from the store into st->wp (via the stock SPI
  * read) and returns how many stages it holds: the prefix up to the first empty
- * waypoint, or 0 (don't arm) if the store is missing or any stage is unusable. */
+ * waypoint. 0 means nothing is saved for this bank (the defaults apply); STORE_
+ * UNUSABLE means something is saved but a stage fails the check, and the
+ * session must not arm at all. */
 static u8 load_stages(volatile ramp_state_t *st, u8 bank)
 {
     u16 buf[RAMP_STORE_SIZE / 2];
@@ -89,7 +93,7 @@ static u8 load_stages(volatile ramp_state_t *st, u8 bank)
         if (h == 0 || h == 0xffff)
             break;
         if (!wp_sane(bank, w[n * 3], w[n * 3 + 1], h))
-            return 0;
+            return STORE_UNUSABLE;
         n++;
     }
     for (i = 0; i < n; i++)
@@ -121,8 +125,10 @@ static void try_arm(volatile ramp_state_t *st)
     if (!IS_SENTINEL(f, c) || st->arm_failed || !ramp_enabled())
         return;
     n = load_stages(st, bank);
-    if (n == 0) {
-        st->arm_failed = 1;   /* nothing usable saved for this mode: an ordinary
+    if (n == 0 && bank == 1)
+        n = ramp_default_stages(st, ramp_selected());
+    if (n == 0 || n == STORE_UNUSABLE) {
+        st->arm_failed = 1;   /* nothing usable for this mode: an ordinary
                                * session; don't re-read flash every tick */
         return;
     }
@@ -174,6 +180,8 @@ static void ramp_tick(void)
         st->magic = RAMP_MAGIC;
         st->stage = 0;
         st->arm_failed = 0;
+        st->picker_on = 0;
+        st->picker_dirty = 0;
     }
 
     if (STRUCT_BASE[OFF_SESSION] == 0) {

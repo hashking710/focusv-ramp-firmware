@@ -118,7 +118,9 @@ typedef void (*flash_write_fn)(int addr, int len, void *buf);
  * anything non-zero means enabled, so a store from before this existed, or
  * one that's never been touched, behaves exactly as it always has. */
 #define RAMP_ENABLED_OFFSET  RAMP_STORE_SIZE
-#define RAMP_STORE_TOTAL     (RAMP_STORE_SIZE + 2)   /* +1 flag, +1 reserved */
+#define RAMP_SEL_OFFSET      (RAMP_STORE_SIZE + 1)   /* the chosen built-in preset */
+#define RAMP_OFS_OFFSET      (RAMP_STORE_SIZE + 2)   /* setup offset, signed F */
+#define RAMP_STORE_TOTAL     (RAMP_STORE_SIZE + 3)
 
 static inline u8 ramp_enabled(void)
 {
@@ -130,6 +132,15 @@ static inline u8 ramp_enabled(void)
     flash_read(DEV_RAMP_FLASH + RAMP_ENABLED_OFFSET, 1, &b);
     return b != 0;
 }
+
+/* Built-in presets (ramp_presets.c). Each device exposes DEV_PICK_COUNT of
+ * them through its picker; an erased selection means the Balanced preset. */
+#define RAMP_DEFAULT_PRESET  2
+#define RAMP_OFS_MIN_F       (-10)
+#define RAMP_OFS_MAX_F       15
+u8  ramp_selected(void);
+int ramp_offset(void);
+void ramp_store_set(u8 off, u8 v);
 
 /* the armed ramp's stages, from its RAM copy (0-based stage index) */
 #define WP_F(st, s)     ((st)->wp[s][0])
@@ -171,6 +182,9 @@ typedef struct {
     u16 last_left;    /* the ramp's own view of the countdown -- see ramp_core.c */
     u8  counted;      /* stock completion bookkeeping already run this session */
     u8  arm_failed;   /* this session's sentinel found no usable store */
+    u8  picker_on;    /* preset select mode (ramp_picker.c) is showing */
+    u8  picker_sel;   /* the preset being shown while picker_on */
+    u8  picker_dirty; /* picker_sel changed and not yet written to flash */
     u8  hold_flags;   /* Carta 2 only: +/- held-together toggle (ramp_input.c) */
     u8  frame_drawn;  /* display bookkeeping (Carta 2 screen) */
     u8  drawn_fill;
@@ -217,5 +231,8 @@ static inline u16 stage_target_display(volatile ramp_state_t *st)
 
 void ramp_step(volatile ramp_state_t *st, int dir);
 void ramp_toggle_enabled(void);
+u8   ramp_default_stages(volatile ramp_state_t *st, u8 sel);
+u8   ramp_picker_event(volatile ramp_state_t *st, int ev, u8 idle,
+                       int enter, int next, int prev, int exit);
 
 #endif

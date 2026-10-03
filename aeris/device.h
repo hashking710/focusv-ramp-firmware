@@ -63,6 +63,18 @@
 
 #define DEV_MAX_F           600      /* official app's concentrate ceiling */
 
+/* Button events (consumer 0x4ee8, mailbox 0x845620, UI state 0x84308c+2 = 1
+ * on the idle screen). A hold from idle opens the preset picker; single clicks
+ * step through the four presets and a hold leaves it. */
+#define DEV_EV_MB           0x845620
+#define DEV_EV_CONSUMER     0x4ee8
+#define DEV_UI_STATE_ADDR   0x84308e
+#define DEV_PICK_COUNT      4
+#define DEV_PICK_ENTER      15
+#define DEV_PICK_NEXT       7
+#define DEV_PICK_PREV       (-1)
+#define DEV_PICK_EXIT       15
+
 struct ramp_state_s;
 void ramp_led_update(void);
 #define DEV_AFTER_TICK(st)  ramp_led_update()

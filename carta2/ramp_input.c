@@ -63,5 +63,14 @@ void ramp_event_entry(void)
         if (ev == 7)
             STRUCT_BASE[OFF_SCREEN] = 1;
     }
+
+    if (mb[1]) {
+        u8 idle = STRUCT_BASE[OFF_SCREEN] == 0 && STRUCT_BASE[OFF_SESSION] == 0;
+        if (ramp_picker_event(st, mb[0], idle,
+                              DEV_PICK_ENTER, DEV_PICK_NEXT, DEV_PICK_PREV, DEV_PICK_EXIT)) {
+            mb[1] = 0;
+            return;
+        }
+    }
     orig_event_consumer();
 }

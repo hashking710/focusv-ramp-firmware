@@ -38,7 +38,7 @@ BASE = 0x28   # code runs at disassembly address + 0x28 (the header sits at flas
 # hook_all: (stock target, wrapper, expected number of callers) -- every caller is patched
 DEVICES = {
     'carta2': dict(
-        src=['common/ramp_core.c', 'common/ramp_store.c', 'carta2/ramp_display.c', 'carta2/ramp_input.c'],
+        src=['common/ramp_core.c', 'common/ramp_store.c', 'common/ramp_picker.c', 'common/ramp_presets.c', 'carta2/ramp_display.c', 'carta2/ramp_input.c'],
         asm=['carta2/ramp_marker_entry.s'],
         inject=0x30000, wp=0x32000, end=0x33000,
         sites=[(0x6e2e, 'ramp_trampoline', 'tjl 0xaf2c'),
@@ -60,23 +60,25 @@ DEVICES = {
                   ('0xe2b4', 'ramp_e2b4_hide', 2)],
         own_callers={'0xd3c0': 2, '0xdcac': 2, '0x5618': 1, '0xaf2c': 1}),
     'aeris': dict(
-        src=['common/ramp_core.c', 'common/ramp_store.c', 'aeris/ramp_led.c'],
+        src=['common/ramp_core.c', 'common/ramp_store.c', 'common/ramp_picker.c', 'common/ramp_presets.c', 'aeris/ramp_led.c', 'aeris/ramp_event.c'],
         asm=['aeris/ramp_marker_entry.s', 'aeris/ramp_click_entry.s'],
         inject=0x14000, wp=0x15000, end=0x16000,
         sites=[(0x6464, 'ramp_trampoline', 'tjl 0x8154'),
                (0xb490, 'ramp_marker_entry', 'tmovs r3, #53'),
-               (0x50d2, 'ramp_click_entry', 'tadds r3, #1')],
+               (0x50d2, 'ramp_click_entry', 'tadds r3, #1'),
+               (0x645c, 'ramp_event_entry', 'tjl 0x4ee8')],
         hook_all=[],
-        own_callers={'0x8154': 1}),
+        own_callers={'0x8154': 1, '0x4ee8': 1}),
     'sport': dict(
-        src=['common/ramp_core.c', 'common/ramp_store.c', 'sport/ramp_led.c'],
+        src=['common/ramp_core.c', 'common/ramp_store.c', 'common/ramp_picker.c', 'common/ramp_presets.c', 'sport/ramp_led.c', 'sport/ramp_event.c'],
         asm=['sport/ramp_marker_entry.s', 'sport/ramp_click_entry.s'],
         inject=0x18000, wp=0x19000, end=0x20000,
         sites=[(0x58b0, 'ramp_trampoline', 'tjl 0x7c00'),
                (0xb002, 'ramp_marker_entry', 'tmovs r3, #53'),
-               (0x47a4, 'ramp_click_entry', 'tadds r3, #1')],
+               (0x47a4, 'ramp_click_entry', 'tadds r3, #1'),
+               (0x58a8, 'ramp_event_entry', 'tjl 0x45cc')],
         hook_all=[],
-        own_callers={'0x7c00': 1}),
+        own_callers={'0x7c00': 1, '0x45cc': 1}),
 }
 
 FAILS = []

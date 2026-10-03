@@ -22,12 +22,19 @@ by, or sponsored by Focus V.
 
 ## What it does
 
-- **Ramps come only from Terpline.** There are no built-in or default ramps. Terpline uploads up
-  to 5 stages per mode (flower / concentrate), each a temperature plus a hold time. The device
-  stores them in their own flash sector.
+- **Ramps from Terpline or the device.** Terpline uploads up to 5 stages per mode (flower /
+  concentrate), each a temperature plus a hold time, stored in their own flash sector. The device
+  also ships six built-in concentrate ramps (the same profiles as Terpline's presets).
+- **Choosing a built-in ramp on the device.** A hold from the idle screen opens the picker, and
+  the choice is kept across power cycles. Carta 2: hold − and the + / − buttons step through the
+  six presets, a click leaves the picker. Aeris and Sport: single clicks step through the first
+  four presets, and the LEDs show which one is selected; a hold leaves the picker. Outside the
+  picker, the stock buttons behave exactly as before.
 - **Starting a ramp** is an ordinary session started at a sentinel temperature (150 °F). If
-  usable stages are saved for the attached atomizer's mode, the device runs them. Otherwise it's a
-  normal stock session at that temperature.
+  usable stages are saved for the attached atomizer's mode, the device runs them. Otherwise, in
+  concentrate mode, it runs the selected built-in preset, and in flower mode it's a normal stock
+  session at that temperature. A setup offset (−10 to +15 °F, from the app) shifts the built-in
+  presets; the device defaults to no offset.
 - **Stages reuse the stock heater.** Each stage changes the active preset's temperature exactly
   the way the stock firmware changes temperature mid-session. The stock heat-up, ready cue, PID
   control and safety limits run every stage unchanged; the patch never drives the heater itself.
@@ -107,6 +114,9 @@ hardware is the remaining step.
 common/ramp.h        design notes, state, store format, safeguard limits
 common/ramp_core.c   ramp sequencer: arming, stages, countdown, dab counting
 common/ramp_store.c  waypoint store (0xB1-0xB5 flower, 0xB6-0xBA concentrate)
+common/ramp_presets.c built-in concentrate ramps and the setup offset
+common/ramp_picker.c preset picker state machine, shared by every device
+aeris/ramp_event.c, sport/ramp_event.c   button-event hook: the picker, then stock
 <device>/device.h    that device's confirmed addresses, each with the stock code that proves it
 carta2/ramp_display.c, carta2/ramp_input.c   Carta 2 screen and buttons
 aeris/ramp_led.c, sport/ramp_led.c           LED progress

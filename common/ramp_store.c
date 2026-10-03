@@ -75,7 +75,7 @@ void ramp_marker_dispatch(u8 marker)
  * write-back cycle save_waypoint() uses, so it can never land on a half
  * state. Called only from a device's ramp_click_entry.s, on a quadruple
  * click of its single button -- see ramp_enabled() in ramp.h. */
-void ramp_toggle_enabled(void)
+void ramp_store_set(u8 off, u8 v)
 {
     u8 buf[RAMP_STORE_TOTAL];
     int i;
@@ -87,10 +87,35 @@ void ramp_toggle_enabled(void)
         buf[0] = (u8)RAMP_STORE_MAGIC;
         buf[1] = (u8)(RAMP_STORE_MAGIC >> 8);
     }
-    buf[RAMP_ENABLED_OFFSET] = buf[RAMP_ENABLED_OFFSET] != 0 ? 0 : 0xff;
+    buf[off] = v;
 
     flash_erase(DEV_RAMP_FLASH);
     flash_write(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, buf);
+}
+
+void ramp_toggle_enabled(void)
+{
+    ramp_store_set(RAMP_ENABLED_OFFSET, ramp_enabled() ? 0 : 0xff);
+}
+
+u8 ramp_selected(void)
+{
+    u8 b;
+    flash_read(DEV_RAMP_FLASH + RAMP_SEL_OFFSET, 1, &b);
+    return (b < DEV_PICK_COUNT) ? b : RAMP_DEFAULT_PRESET;
+}
+
+int ramp_offset(void)
+{
+    u8 b;
+    int v;
+    flash_read(DEV_RAMP_FLASH + RAMP_OFS_OFFSET, 1, &b);
+    if (b == 0xff)
+        return 0;
+    v = (signed char)b;
+    if (v < RAMP_OFS_MIN_F) v = RAMP_OFS_MIN_F;
+    if (v > RAMP_OFS_MAX_F) v = RAMP_OFS_MAX_F;
+    return v;
 }
 
 /* Called from ramp_click_entry.s every click in place of the two stock

@@ -25,14 +25,32 @@ static const u8 STOP_R[5] = {  60, 140, 220, 255, 255 };
 static const u8 STOP_G[5] = {  90,  70,  60, 120, 215 };
 static const u8 STOP_B[5] = { 255, 230, 160,  60,  60 };
 
+/* Preset picker: one LED per preset position, lit up to the chosen preset. */
+static void show_selection(u8 sel)
+{
+    int i;
+    for (i = 0; i < LED_COUNT; i++) {
+        u8 on = i <= sel;
+        LED_RGB[i * 3 + 0] = on ? 60 : 0;
+        LED_RGB[i * 3 + 1] = on ? 140 : 0;
+        LED_RGB[i * 3 + 2] = on ? 255 : 0;
+    }
+    led_push();
+}
+
 void ramp_led_update(void)
 {
     volatile ramp_state_t *st = RAMP_STATE;
     int lo = 0x7fff, hi = 0, f, frac, x, seg, t, lit, i;
     u8 r, g, b;
 
-    if (!ramp_active(st) || LED_ENABLED == 0)
+    if (LED_ENABLED == 0)
         return;
+    if (!ramp_active(st)) {
+        if (st->picker_on)
+            show_selection(st->picker_sel);
+        return;
+    }
 
     for (i = 0; i < st->n_stages; i++) {
         f = WP_F(st, i);

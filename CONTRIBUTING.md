@@ -41,7 +41,7 @@ file alone.
 
 ## Code of conduct
 
-Same expectation as [focusv-ble-research](https://github.com/hashking710/focusv-ble-research/blob/main/CONTRIBUTING.md#code-of-conduct):
+Same expectation as [focusv-ble-research](https://github.com/hashking710/focusv-ble-research/blob/master/CONTRIBUTING.md#code-of-conduct):
 be straightforward about what you know versus what you're guessing, credit sources, and keep
 disagreements about the evidence, not the person presenting it. Here specifically: overstating
 confidence in an address is the one mistake this project cares most about avoiding.

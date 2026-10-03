@@ -15,7 +15,7 @@ identical length, everything else in the firmware untouched. Nobody involved has
 source code. Every address, every struct layout, and every function this patches was worked out
 independently by disassembling firmware Focus V itself serves, in the clear, to any device that
 asks for an update (see
-[focusv-ble-research's LEGAL.md](https://github.com/hashking710/focusv-ble-research/blob/main/LEGAL.md)
+[focusv-ble-research's LEGAL.md](https://github.com/hashking710/focusv-ble-research/blob/master/LEGAL.md)
 for the fuller reasoning behind that research). This repo never contains Focus V's firmware — only
 original code written for this project, plus a script describing where a few bytes change.
 

@@ -8,7 +8,7 @@
 > **Not yet tested on real hardware.** Every patch passes the build's full verification and an
 > independent disassembler cross-check, but that proves the bytes are right, not how a device
 > behaves. Flash only a device you can recover over SWire (see focusv-ble-research's
-> [hardware guide](https://github.com/hashking710/focusv-ble-research/blob/main/docs/hardware-setup.md)),
+> [hardware guide](https://github.com/hashking710/focusv-ble-research/blob/master/docs/hardware-setup.md)),
 > and keep your original firmware file. Bench-test reports are the most useful contribution right now.
 
 Independent, hobbyist firmware patches that add an autonomous temperature ramp to Focus V's
@@ -148,8 +148,8 @@ No one is known to have flashed any earlier version.
 ## Reverting
 
 Keep your original firmware file. Flashing it back (see focusv-ble-research's
-[hardware guide](https://github.com/hashking710/focusv-ble-research/blob/main/docs/hardware-setup.md)
-or [`ota-flash.html`](https://github.com/hashking710/focusv-ble-research/blob/main/tools/ota-flash.html))
+[hardware guide](https://github.com/hashking710/focusv-ble-research/blob/master/docs/hardware-setup.md)
+or [`ota-flash.html`](https://github.com/hashking710/focusv-ble-research/blob/master/tools/ota-flash.html))
 is a full revert. See [`LEGAL.md`](LEGAL.md) for why this repo ships only source and patch bytes.
 
 ## Contributing

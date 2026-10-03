@@ -225,7 +225,7 @@ def main():
         text, k = re.subn(r'BLOB_SHA256 = "[0-9a-f]{64}"', f'BLOB_SHA256 = "{hashlib.sha256(blob).hexdigest()}"', text)
         check(k == 1, 'blob hash written')
         open(app, 'w', newline='\n').write(text)
-        open(f'{REPO}/{dev}/ramp_firmware_v1.bin', 'wb').write(blob)   # local only; .gitignore'd
+        open(f'{REPO}/{dev}/ramp_firmware_{dev}_v1.bin', 'wb').write(blob)   # local only; .gitignore'd
 
         print(f'== {a.device}: end to end ==')
         out_path = f'{work}/patched.bin'
@@ -266,7 +266,7 @@ def main():
         def refuses(fw_bytes, label, blob_override=None):
             fw, o = f'{work}/neg_in.bin', f'{work}/neg_out.bin'
             open(fw, 'wb').write(fw_bytes)
-            blob_path = f'{REPO}/{dev}/ramp_firmware_v1.bin'
+            blob_path = f'{REPO}/{dev}/ramp_firmware_{dev}_v1.bin'
             if blob_override is not None:
                 open(blob_path, 'wb').write(blob_override)
             try:

@@ -53,7 +53,7 @@ CODE_INJECT_ADDR = 0x14000
 WAYPOINT_SECTOR = 0x15000
 IMAGE_END_ADDR = 0x16000
 
-CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_v1.bin"   # built locally, never published
+CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_aeris_v1.bin"   # built locally, never published
 BLOB_SHA256 = "52d76f464cfa2fb1f025c5e52c9ddd8749b4516ef418cd3000e6296f4ccdce8a"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).

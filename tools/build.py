@@ -67,9 +67,10 @@ DEVICES = {
         sites=[(0x6464, 'ramp_trampoline', 'tjl 0x8154'),
                (0xb490, 'ramp_marker_entry', 'tmovs r3, #53'),
                (0x645c, 'ramp_event_entry', 'tjl 0x4ee8'),
+               (0x61ae, 'ramp_btn_entry', 'tjl 0x920c'),
                (0xb066, 'ramp_announce_entry', 'tjl 0xe734')],
         hook_all=[],
-        own_callers={'0x8154': 1, '0x4ee8': 1}),
+        own_callers={'0x8154': 1, '0x4ee8': 1, '0x920c': 1}),
     'sport': dict(
         src=['common/ramp_core.c', 'common/ramp_store.c', 'common/ramp_picker.c', 'common/ramp_presets.c', 'common/ramp_announce.c', 'sport/ramp_led.c', 'sport/ramp_event.c'],
         asm=['sport/ramp_marker_entry.s'],
@@ -77,9 +78,10 @@ DEVICES = {
         sites=[(0x58b0, 'ramp_trampoline', 'tjl 0x7c00'),
                (0xb002, 'ramp_marker_entry', 'tmovs r3, #53'),
                (0x58a8, 'ramp_event_entry', 'tjl 0x45cc'),
+               (0x57ee, 'ramp_btn_entry', 'tjl 0x8ff8'),
                (0xa9ea, 'ramp_announce_entry', 'tjl 0xec3c')],
         hook_all=[],
-        own_callers={'0x7c00': 1, '0x45cc': 1}),
+        own_callers={'0x7c00': 1, '0x45cc': 1, '0x8ff8': 1}),
 }
 
 FAILS = []

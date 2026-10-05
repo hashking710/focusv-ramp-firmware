@@ -32,6 +32,11 @@ static const u8 PRESET_HOLD[PRESET_COUNT][PRESET_STAGES] = {
 };
 static const u8 PRESET_N[PRESET_COUNT] = { 4, 4, 4, 4, 5, 4 };
 
+const u8 RAMP_PRESET_RGB[6][3] = {
+    {   0, 200, 255 }, {  60, 255,  60 }, { 255, 170,   0 },
+    { 255,  40, 200 }, { 140,  90, 255 }, { 255, 255, 255 },
+};
+
 static int clamp_int(int v, int lo, int hi)
 {
     return v < lo ? lo : (v > hi ? hi : v);

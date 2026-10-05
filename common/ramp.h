@@ -211,6 +211,8 @@ typedef struct {
     u8  picker_enabled; /* the ramp system's on/off, cached while the picker shows */
     u32 picker_t0;    /* system tick of the picker's last event (timeout) */
     u16 heat_s;       /* seconds this stage has spent heating, not at temperature */
+    u8  btn_on;       /* Aeris/Sport: the button light shows btn_rgb (ramp_led.c) */
+    u8  btn_rgb[3];
     u16 ann_tries;    /* announcement send attempts left (ramp_announce.c) */
     u8  ann_enabled;  /* the announcement's fields, captured when it's queued */
     u8  ann_preset;
@@ -261,10 +263,12 @@ static inline u16 stage_target_display(volatile ramp_state_t *st)
 void ramp_step(volatile ramp_state_t *st, int dir);
 void ramp_picker_draw(u8 sel, u8 enabled);   /* Carta 2 only */
 
-/* Colour of the preset picker's selection on the LEDs; dim red when the system is off. */
-#define RAMP_PICK_R  60
-#define RAMP_PICK_G  140
-#define RAMP_PICK_B  255
+/* Picker colours on the LEDs and the button light: one per preset (Flavor,
+ * Rosin, Balanced, Sauce, Long session, Clouds), red when the system is off. */
+extern const u8 RAMP_PRESET_RGB[6][3];   /* ramp_presets.c */
+#define RAMP_OFF_R   255
+#define RAMP_OFF_G   0
+#define RAMP_OFF_B   0
 
 void ramp_toggle_enabled(void);
 u8   ramp_default_stages(volatile ramp_state_t *st, u8 sel);

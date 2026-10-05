@@ -25,18 +25,26 @@ static const u8 STOP_R[5] = {  60, 140, 220, 255, 255 };
 static const u8 STOP_G[5] = {  90,  70,  60, 120, 215 };
 static const u8 STOP_B[5] = { 255, 230, 160,  60,  60 };
 
-/* Preset picker: one LED per preset position, lit up to the chosen preset; with
- * the ramp system off, every LED is dim red instead. */
+/* Preset picker: one LED per preset position, lit up to the chosen preset in
+ * that preset's colour; with the ramp system off, every LED is dim red. */
 static void show_selection(u8 sel, u8 enabled)
 {
     int i;
     for (i = 0; i < LED_COUNT; i++) {
         u8 on = i <= sel;
-        LED_RGB[i * 3 + 0] = enabled ? (on ? RAMP_PICK_R : 0) : 60;
-        LED_RGB[i * 3 + 1] = enabled ? (on ? RAMP_PICK_G : 0) : 0;
-        LED_RGB[i * 3 + 2] = enabled ? (on ? RAMP_PICK_B : 0) : 0;
+        LED_RGB[i * 3 + 0] = enabled ? (on ? RAMP_PRESET_RGB[sel][0] : 0) : 60;
+        LED_RGB[i * 3 + 1] = enabled ? (on ? RAMP_PRESET_RGB[sel][1] : 0) : 0;
+        LED_RGB[i * 3 + 2] = enabled ? (on ? RAMP_PRESET_RGB[sel][2] : 0) : 0;
     }
     led_push();
+}
+
+static void button(volatile ramp_state_t *st, u8 r, u8 g, u8 b)
+{
+    st->btn_rgb[0] = r;
+    st->btn_rgb[1] = g;
+    st->btn_rgb[2] = b;
+    st->btn_on = 1;
 }
 
 void ramp_led_update(void)
@@ -47,11 +55,18 @@ void ramp_led_update(void)
 
     if (st->picker_on && !ramp_active(st) && !DEV_IDLE())
         ramp_picker_close(st);   /* asleep, or off the idle state: stop showing it */
+    st->btn_on = 0;              /* the button is stock's unless set below */
     if (LED_ENABLED == 0)
         return;
     if (!ramp_active(st)) {
-        if (st->picker_on)
+        if (st->picker_on) {
             show_selection(st->picker_sel, st->picker_enabled);
+            if (st->picker_enabled)
+                button(st, RAMP_PRESET_RGB[st->picker_sel][0], RAMP_PRESET_RGB[st->picker_sel][1],
+                       RAMP_PRESET_RGB[st->picker_sel][2]);
+            else
+                button(st, RAMP_OFF_R, RAMP_OFF_G, RAMP_OFF_B);
+        }
         return;
     }
 
@@ -79,4 +94,32 @@ void ramp_led_update(void)
         LED_RGB[i * 3 + 2] = on ? b : 0;
     }
     led_push();
+    button(st, r, g, b);
+}
+
+/* The control button's light. It's an RGB LED on PB5/PB6/PB7, driven by a
+ * software-PWM timer interrupt (0x49c: counter 0-99 against three duty values,
+ * active low): 0x845602 red, 0x8455fc green, 0x8455fe blue, each 0-100. The
+ * stock LED effect dispatcher 0x920c (one caller, 0x61ae, top of the main loop)
+ * sets them, scaled by the brightness byte 0x84562d. Installed at 0x61ae: while a
+ * ramp or the picker owns the lights, set the duties here instead of running
+ * the stock effects (the ring is pushed by ramp_led_update); otherwise run the
+ * dispatcher unchanged, which also puts the stock colour back. */
+#define BTN_DUTY_R   (*(volatile u16 *)0x845602)
+#define BTN_DUTY_G   (*(volatile u16 *)0x8455fc)
+#define BTN_DUTY_B   (*(volatile u16 *)0x8455fe)
+#define BRIGHTNESS   (*(volatile u8 *)0x84562d)
+#define stock_led_dispatch  STOCK_FN(void_fn, 0x920c)
+
+void ramp_btn_entry(void)
+{
+    volatile ramp_state_t *st = RAMP_STATE;
+    int bri = BRIGHTNESS > 100 ? 100 : BRIGHTNESS;
+    if (st->magic != RAMP_MAGIC || !st->btn_on || LED_ENABLED == 0) {
+        stock_led_dispatch();
+        return;
+    }
+    BTN_DUTY_R = (u16)rom_div(st->btn_rgb[0] * bri, 255);
+    BTN_DUTY_G = (u16)rom_div(st->btn_rgb[1] * bri, 255);
+    BTN_DUTY_B = (u16)rom_div(st->btn_rgb[2] * bri, 255);
 }

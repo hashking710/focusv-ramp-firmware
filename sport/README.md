@@ -31,13 +31,14 @@ Body:    90,860 bytes (after the 40-byte header), SHA-1 4b57f086a175...
 
 `apply_patch.py` patches only this exact build. There is no override.
 
-## Patch sites (4, written and checked by `tools/build.py`)
+## Patch sites (5, written and checked by `tools/build.py`)
 
 | Site | Stock | Replaced with |
 | --- | --- | --- |
 | 0x58b0 | call to orchestrator `0x7c00` (the only caller) | `ramp_trampoline`: stock tick, the ramp, then the LEDs |
 | 0xb002 | marker-byte load before the A5/AF/66 chain | `ramp_marker_entry`: waypoint upload markers |
 | 0x58a8 | call to button-event consumer `0x45cc` (the only caller) | `ramp_event_entry`: the preset picker, then the stock consumer |
+| 0x57ee | call to the LED effect dispatcher `0x8ff8` (the only caller) | `ramp_btn_entry`: button light and LEDs while a ramp or the picker owns them, else the stock effects |
 | 0xa9ea | stock send of the `0xAA` dab-counter reply (notify `0xec3c`) | `ramp_announce_entry`: sends it unchanged, then announces the patch (`0xBC`) |
 
 The code goes at flash 0x18000 and runs at 0x18028. The waypoint store has its own sector at
@@ -48,9 +49,11 @@ the same address as its own code, so the first save would have erased the patch.
 
 From the idle state (no session), **hold the button** to open the picker. Inside it:
 
-- **single click**: next built-in preset (Flavor first, Rosin, Balanced, Sauce; Balanced by default),
-  shown as one lit blue LED per position, up to the chosen one;
-- **triple click**: switch the ramp system on or off -- with it off, every LED is dim red;
+- **single click**: next built-in preset (Flavor first, Rosin, Balanced, Sauce; Balanced by default).
+  The **button light** shows the preset's colour (cyan, green, amber, magenta), and the LEDs light up
+  to its position in that colour;
+- **triple click**: switch the ramp system on or off -- with it off, the button light is red and
+  every LED is dim red;
 - **hold**: leave, saving the choice in flash.
 
 The picker opens even when the system is off, so it can be switched back on. While the system is
@@ -64,10 +67,13 @@ Like stock, the picker ignores button events during the power-on transition (str
 `+10` == 1, which the stock consumer also checks). It follows the LED setting: with LEDs off, the
 picker still works but shows nothing.
 
-**Not done: the button light.** The control button has its own light, but the stock LED effects
-write its colour and output it within the same call, every tick, so a colour the patch writes
-afterwards is never shown. Driving it needs a hook on that output path; until then the patch leaves
-the light alone.
+**The button light.** During a ramp it shows the same temperature colour as the LEDs (blue at
+the coolest stage through to gold at the hottest); in the picker, the preset's colour, or red when the
+system is off. It's one more addressable RGB LED, sent by `0x8efc` from `0x844b12`/`0x844b0c`/`0x844b0e` (red, green, blue). The patch fills those, scaled by the brightness byte (`0x844b3d`), and sends them with `0x8efc`. The stock LED effect dispatcher (`0x8ff8`, one caller at `0x57ee`, top of the
+main loop) normally sets both lights; the patch wraps that call, and while a ramp or the picker owns
+the lights it sets them itself instead of running the stock effects. Otherwise the dispatcher runs
+unchanged, which also restores the stock colour. Both lights follow the LED setting: with LEDs off,
+the stock effects keep both.
 
 ## Device-specific behaviour, confirmed from the code that uses it
 

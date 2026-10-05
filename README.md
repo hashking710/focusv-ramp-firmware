@@ -27,8 +27,9 @@ by, or sponsored by Focus V.
   also ships six built-in concentrate ramps (the same profiles as Terpline's presets).
 - **Choosing a built-in ramp, and on/off, on the device.** A hold from idle opens a picker (Carta 2:
   hold −). Carta 2: + / − step through six presets, double click switches the ramp system on or off,
-  click leaves. Aeris and Sport: single clicks step through four presets on the LEDs, triple click
-  switches on or off, hold leaves. The choice and the on/off state are kept in flash. Outside the
+  click leaves. Aeris and Sport: single clicks step through four presets, shown in colour on the
+  button light and the LEDs, triple click switches on or off, hold leaves. During a ramp the button
+  light shows the temperature colour. The choice and the on/off state are kept in flash. Outside the
   picker, every stock gesture behaves as before.
 - **Starting a ramp** is an ordinary session started at a sentinel temperature (150 °F). If
   usable stages are saved for the attached atomizer's mode, the device runs them. Otherwise, in
@@ -142,8 +143,8 @@ tools/build.py                               build + verification
 | Device | Firmware build | Patch sites | Code / waypoint sector |
 | --- | --- | --- | --- |
 | [`carta2/`](carta2/) | PROD-111224 | 33 | 0x30000 / 0x32000 |
-| [`aeris/`](aeris/) | PROD-111224 | 4 | 0x14000 / 0x15000 |
-| [`sport/`](sport/) | PROD-030426 | 4 | 0x18000 / 0x19000 |
+| [`aeris/`](aeris/) | PROD-111224 | 5 | 0x14000 / 0x15000 |
+| [`sport/`](sport/) | PROD-030426 | 5 | 0x18000 / 0x19000 |
 
 ## History
 

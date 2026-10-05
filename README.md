@@ -42,10 +42,11 @@ by, or sponsored by Focus V.
 - **One press stops it**, at any stage: the main button on the Carta 2, the single button on the
   Aeris and Sport. Both use the stock stop path. On the Carta 2, **+ / −** while heating jump to
   the next or previous stage.
-- **The dab counter counts real dabs.** A ramp counts once, when it first reaches stage 3. It
-  uses the same counters, and the same save, as a finished stock session, so the official app
-  reports it accurately. A ramp stopped before stage 3 isn't counted, just as a stopped stock
-  session isn't. Ramps with fewer than 3 stages are counted by the stock firmware when they finish.
+- **The dab counter counts real dabs.** A ramp counts once, when it has reached stage 2 and has run
+  for 20 seconds at temperature. Time at temperature is the stock "reached" flag, so on the Carta 2
+  heat-up doesn't count. It uses the same counters, and the same save, as a finished stock session,
+  so the official app reports it accurately. A ramp stopped before that point isn't counted, just as
+  a stopped stock session isn't. A single-stage ramp is counted by the stock firmware when it finishes.
 - **Progress display.** On the Carta 2, the top of the screen shows battery % and time left on
   the left, and the stage target over the live temperature on the right; a chart of the whole ramp
   sits below. On the Aeris (4 LEDs) and Sport (5 LEDs), the number of lit LEDs shows progress and

@@ -1,7 +1,7 @@
 /* ramp_presets.c -- Terpline's built-in concentrate ramps, shared by every
  * device. Values mirror terpline-web's lib/protocol/hardwareRampPresets.ts:
  * every profile starts at 440-480 F, peaks at 490-520 F, and has 4-5 stages,
- * so each counts a dab at stage 3.
+ * so each one can count a dab (stage 2 and 20 s at temperature; see ramp.h).
  *
  * Used only when a concentrate session starts from the sentinel with no
  * uploaded waypoints saved -- an upload always takes precedence. The setup

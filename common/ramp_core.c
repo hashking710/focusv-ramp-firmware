@@ -145,6 +145,7 @@ static void try_arm(volatile ramp_state_t *st)
     st->counted = 0;
     st->frame_drawn = 0;
     st->trace_n = 0;
+    st->at_temp_s = 0;
     FIELD16(OFF_COUNTDOWN) = total;
     st->last_left = total;
     apply_stage(st, 1);
@@ -225,6 +226,12 @@ static void ramp_tick(void)
     t = FIELD16(OFF_COUNTDOWN);
     if (t != st->last_left && t + 1 != st->last_left)
         FIELD16(OFF_COUNTDOWN) = t = st->last_left;
+    /* one second went by; it counts toward the dab only if the stock
+     * "reached" flag says the heater is at this stage's temperature. On
+     * Aeris and Sport the countdown only moves once reached, so this is
+     * always true there; on the Carta 2 the countdown runs through heat-up. */
+    if (t + 1 == st->last_left && STRUCT_BASE[OFF_REACHED] && st->at_temp_s < 0xffff)
+        st->at_temp_s++;
     st->last_left = t;
 
     if (t <= 1) {
@@ -248,7 +255,7 @@ static void ramp_tick(void)
     if (s != st->stage)
         apply_stage(st, s);
 
-    if (!st->counted && st->stage >= COUNT_AT_STAGE)
+    if (!st->counted && st->stage >= COUNT_MIN_STAGE && st->at_temp_s >= COUNT_AT_TEMP_S)
         count_dab(st);
 }
 
@@ -268,6 +275,6 @@ void ramp_step(volatile ramp_state_t *st, int dir)
     st->last_left = (u16)(st->total_s - stage_start(st, (u8)target));
     FIELD16(OFF_COUNTDOWN) = st->last_left;
     apply_stage(st, (u8)target);
-    if (!st->counted && st->stage >= COUNT_AT_STAGE)
+    if (!st->counted && st->stage >= COUNT_MIN_STAGE && st->at_temp_s >= COUNT_AT_TEMP_S)
         count_dab(st);
 }

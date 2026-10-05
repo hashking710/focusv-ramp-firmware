@@ -48,7 +48,7 @@ SHA-1:   a6b741dc0508... (whole file)
   [`tools/make_logo.py`](../tools/make_logo.py).
 - **The dab count** is the same per-mode counter the stock screen shows (flower total with a
   flower atomizer, concentrate total with a concentrate one), right-aligned to the same edge as
-  the temperatures, and it ticks up the moment a ramp reaches stage 3.
+  the temperatures, and it ticks up as soon as a ramp qualifies (stage 2 and 20 s at temperature).
 - **The heat meter** is a column of 10 circles, blue at the bottom through green, yellow and
   orange to red at the top, lit up to the live temperature.
 

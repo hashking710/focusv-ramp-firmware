@@ -30,15 +30,16 @@
  *  runs once the target is reached, so each hold is time AT temperature; on the
  *  Carta 2 it runs from the start of each stage.)
  *
- *  Dab counting. On first entering stage 3 the stock completion counter
- *  increments run once, so the official app's counters report it at once; the
+ *  Dab counting. Once a ramp is on stage 2 or later and has run 20 seconds at
+ *  temperature (the stock "reached" flag, seconds counted in at_temp_s), the
+ *  stock completion counter increments run once, so the official app's counters
+ *  report it at once; the
  *  stock save arming that persists them runs when the ramp ends, after the slot
  *  is restored, so no save can capture the ramp's temporary stage temperature.
  *  A counted ramp ends one second early through the stock stop and end cue
  *  WITHOUT the completion bookkeeping, so it is never counted twice. Ramps with
- *  fewer than 3 stages are counted by the stock completion as usual. A ramp
- *  stopped before stage 3 is not counted, exactly as a stopped stock session
- *  isn't.
+ *  single stage are counted by the stock completion as usual. A ramp stopped
+ *  before that point is not counted, exactly as a stopped stock session isn't.
  *
  *  Safeguards. Waypoints are copied to RAM through the stock SPI read when a
  *  ramp arms and must all pass a range / consistency check (official-app
@@ -169,7 +170,8 @@ void ramp_store_set(u8 off, u8 v);
 #define RAMP_MAX_HOLD  300
 
 /* ---- dab counting threshold ---------------------------------------------- */
-#define COUNT_AT_STAGE 3
+#define COUNT_MIN_STAGE   2    /* a dab needs at least this stage ... */
+#define COUNT_AT_TEMP_S   20   /* ... and this many seconds at temperature */
 
 /* ---- runtime state (non-retention SRAM; magic-checked, never trusted at
  * power-on) ------------------------------------------------------------------ */
@@ -183,6 +185,7 @@ typedef struct {
     u16 saved_f;      /* that slot's original contents (the sentinel), */
     u16 saved_c;      /*   restored when the session ends */
     u16 last_left;    /* the ramp's own view of the countdown -- see ramp_core.c */
+    u16 at_temp_s;    /* seconds this ramp has run with the stock "reached" flag set */
     u8  counted;      /* stock completion bookkeeping already run this session */
     u8  arm_failed;   /* this session's sentinel found no usable store */
     u8  picker_on;    /* preset select mode (ramp_picker.c) is showing */

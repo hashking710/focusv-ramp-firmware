@@ -117,7 +117,9 @@ Every address in [`device.h`](device.h) is listed with the stock code that prove
 
 ## Device-specific behaviour
 
-- The stock session clock runs from the start of each stage, so each hold is wall-clock time.
+- The stock session clock runs from the start of each stage, so the patch gives back every second
+  spent heating: each hold is time at temperature, the same as on Aeris and Sport. If a stage hasn't
+  reported reached after 120 s of heating, its hold counts down anyway, so a ramp can't stall.
 - The dab counter base is 0x8430e0, and saving is armed by setting +31 = 50 and +33 = 0, exactly as
   the stock timer does when a session finishes.
 - Flash writes go through `0x19a78`. An earlier version used `0x19308`, which is the PROD-071024

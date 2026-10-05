@@ -75,6 +75,8 @@
 #define DEV_PICK_PREV       1
 #define DEV_PICK_EXIT       7
 #define DEV_PICK_TOGGLE     8      /* double click: ramp system on / off */
+void ramp_picker_closed_redraw(void);
+#define DEV_PICKER_CLOSED() ramp_picker_closed_redraw()
 
 #define DEV_AFTER_TICK(st)  ((void)0)   /* the screen draws from its own hooks */
 

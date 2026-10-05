@@ -9,14 +9,15 @@
  *   picker: exit        -> leave, writing the choice to flash if it changed
  *   picker: anything else is swallowed, so the stock handler never sees it
  *
- * The picker closes, passing the event through, as soon as the device is no
+ * It closes after 30 s with no button event (ramp_core.c), keeping the choice.
+ * It also closes, passing the event through, as soon as the device is no
  * longer idle (screen change, sleep, a session) or a ramp is running. Nothing
  * starts from the picker: a ramp still starts as a stock sentinel session. */
 #include "ramp.h"
 
 void ramp_picker_close(volatile ramp_state_t *st)
 {
-    if (st->picker_dirty)
+    if (st->picker_dirty && st->picker_sel != ramp_selected())
         ramp_store_set(RAMP_SEL_OFFSET, st->picker_sel);
     st->picker_on = 0;
     st->picker_dirty = 0;
@@ -35,6 +36,7 @@ u8 ramp_picker_event(volatile ramp_state_t *st, int ev, u8 idle,
     }
 
     if (st->picker_on) {
+        st->picker_t0 = DEV_SYS_TICK;
         if (!idle) {
             ramp_picker_close(st);
             return 0;
@@ -59,6 +61,7 @@ u8 ramp_picker_event(volatile ramp_state_t *st, int ev, u8 idle,
         st->picker_sel = ramp_selected();
         st->picker_enabled = ramp_enabled();
         st->picker_dirty = 0;
+        st->picker_t0 = DEV_SYS_TICK;
         return 1;
     }
     return 0;

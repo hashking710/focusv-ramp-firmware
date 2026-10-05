@@ -24,13 +24,10 @@
  * existed reads it as 0xFF regardless -- NOR flash leaves anything past
  * what was actually written at its erased value -- so this needs no
  * migration: an old store is simply read as "enabled", the existing default. */
-static void save_waypoint(u8 bank, u8 slot, u16 f, u16 c, u16 hold)
+/* The whole store into buf; a fresh one if the sector holds no store. */
+static void store_load(u8 *buf)
 {
-    u8 buf[RAMP_STORE_TOTAL];
-    u8 *p;
     int i;
-
-    /* NOR flash: read the whole store, erase the sector, write it back */
     flash_read(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, buf);
     if (buf[0] != (u8)RAMP_STORE_MAGIC || buf[1] != (u8)(RAMP_STORE_MAGIC >> 8)) {
         for (i = 0; i < RAMP_STORE_TOTAL; i++)   /* first save, or an older layout */
@@ -38,6 +35,33 @@ static void save_waypoint(u8 bank, u8 slot, u16 f, u16 c, u16 hold)
         buf[0] = (u8)RAMP_STORE_MAGIC;
         buf[1] = (u8)(RAMP_STORE_MAGIC >> 8);
     }
+}
+
+/* Writes buf back (NOR flash: erase the sector, then write) -- unless the
+ * sector already holds exactly this, so repeated uploads, an unchanged picker
+ * choice or the same offset cost no erase cycle and no power-loss window. */
+static void store_commit(u8 *buf)
+{
+    u8 cur[RAMP_STORE_TOTAL];
+    int i;
+    buf[RAMP_VER_OFFSET] = RAMP_STORE_VERSION;
+    flash_read(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, cur);
+    for (i = 0; i < RAMP_STORE_TOTAL; i++)
+        if (cur[i] != buf[i])
+            break;
+    if (i == RAMP_STORE_TOTAL)
+        return;
+    flash_erase(DEV_RAMP_FLASH);
+    flash_write(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, buf);
+}
+
+static void save_waypoint(u8 bank, u8 slot, u16 f, u16 c, u16 hold)
+{
+    u8 buf[RAMP_STORE_TOTAL];
+    u8 *p;
+    int i;
+
+    store_load(buf);
 
     /* Waypoint 1 starts a new upload: clear the bank's later waypoints, so a
      * shorter ramp never inherits stages from a longer one saved before it.
@@ -52,8 +76,7 @@ static void save_waypoint(u8 bank, u8 slot, u16 f, u16 c, u16 hold)
     p[2] = (u8)c;    p[3] = (u8)(c >> 8);
     p[4] = (u8)hold; p[5] = (u8)(hold >> 8);
 
-    flash_erase(DEV_RAMP_FLASH);
-    flash_write(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, buf);
+    store_commit(buf);
 }
 
 void ramp_marker_dispatch(u8 marker, u8 byte14)
@@ -83,19 +106,9 @@ void ramp_marker_dispatch(u8 marker, u8 byte14)
 void ramp_store_set(u8 off, u8 v)
 {
     u8 buf[RAMP_STORE_TOTAL];
-    int i;
-
-    flash_read(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, buf);
-    if (buf[0] != (u8)RAMP_STORE_MAGIC || buf[1] != (u8)(RAMP_STORE_MAGIC >> 8)) {
-        for (i = 0; i < RAMP_STORE_TOTAL; i++)
-            buf[i] = 0xff;
-        buf[0] = (u8)RAMP_STORE_MAGIC;
-        buf[1] = (u8)(RAMP_STORE_MAGIC >> 8);
-    }
+    store_load(buf);
     buf[off] = v;
-
-    flash_erase(DEV_RAMP_FLASH);
-    flash_write(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, buf);
+    store_commit(buf);
 }
 
 void ramp_toggle_enabled(void)

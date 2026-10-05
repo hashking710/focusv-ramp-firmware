@@ -108,7 +108,13 @@ Then `python3 <device>/apply_patch.py --input your-file.bin --output patched.bin
 
 `sh tools/hosttest/run.sh` (Docker) compiles the shared code for a PC and runs it against a model
 of the stock firmware: whole ramps under both countdown rules (Aeris/Sport and Carta 2), dab counting,
-the store and its markers, the picker, the offset, the announcement, and power-on RAM.
+the store and its markers, the picker and its timeout, the offset, skipped flash writes, the
+heat cap, the announcement, and power-on RAM. CI runs it on every push.
+
+`sh tools/hosttest/run_display.sh your-carta2-PROD-111224.bin` runs the real Carta 2 screen code
+with your stock image mapped at the device's own addresses. Stock `fill_rect`/`blit` are reproduced
+from their decompiled bodies, so the frames use the real glyphs. It checks that nothing draws off
+the 240 x 240 screen and writes the frames to `tools/hosttest/out/`.
 
 What none of this proves is behaviour on a real device: timing, the screen, the LEDs, and the
 stock code paths the patch relies on but that were read rather than run. Bench testing on

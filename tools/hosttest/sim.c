@@ -27,7 +27,10 @@ unsigned char sim_dab[64];
 unsigned char sim_cue[16];
 unsigned char sim_state[1024] __attribute__((aligned(8)));
 
+unsigned int sim_systick;
+int sim_picker_closed;
 static unsigned char flash[0x1000];
+static int erases, never_reach;
 static int carta_timing;     /* 1: countdown runs through heat-up (Carta 2) */
 static int tick_no;
 static int notify_busy;      /* sim_notify refuses this many packets first */
@@ -46,7 +49,7 @@ static void set16(unsigned char *b, int off, int v) { b[off] = (unsigned char)v;
 short sim_div(int a, int b) { return (short)(a / b); }
 
 void sim_flash_read(int addr, int len, void *buf) { memcpy(buf, flash + (addr - DEV_RAMP_FLASH), len); }
-void sim_flash_erase(int addr) { memset(flash + (addr - DEV_RAMP_FLASH), 0xff, 0x1000); }
+void sim_flash_erase(int addr) { erases++; memset(flash + (addr - DEV_RAMP_FLASH), 0xff, 0x1000); }
 void sim_flash_write(int addr, int len, void *buf)
 {
     int i;
@@ -79,7 +82,7 @@ void sim_pid_tick(void)
     if (meas < target_f) meas++;
     else if (meas > target_f) meas--;
     set16(sim_struct, OFF_MEAS_F, meas);
-    if (!sim_struct[OFF_REACHED] && meas == target_f)
+    if (!sim_struct[OFF_REACHED] && meas == target_f && !never_reach)
         sim_struct[OFF_REACHED] = 1;
     if (tick_no % TPS == 0 && (carta_timing || sim_struct[OFF_REACHED])) {
         int left = u16at(sim_struct, OFF_COUNTDOWN);
@@ -105,11 +108,12 @@ static void reset_device(int carta)
     sim_struct[0x04] = 0;   /* F scale */
     tick_no = 0;
     notify_busy = 0; notify_ok = 0; last_len = 0;
+    erases = 0; never_reach = 0; sim_picker_closed = 0; sim_systick = 0x12345678u;
 }
 
 static volatile ramp_state_t *ST(void) { return RAMP_STATE; }
 
-static void tick(void) { tick_no++; ramp_trampoline(); }
+static void tick(void) { tick_no++; sim_systick += 16000000u / TPS; ramp_trampoline(); }
 
 /* a session on custom slot 0 at temperature f with hold h seconds */
 static void start_session(int is_conc, int f, int c, int hold)
@@ -177,6 +181,15 @@ static void t_default_preset(int carta)
     CHECK(sim_dab[31] == 200 && sim_dab[32] == 250, "save not armed");
     CHECK(u16at(sim_struct, TBL_CO_F * 2) == 150, "slot not restored: %d", u16at(sim_struct, TBL_CO_F * 2));
     CHECK(r.ended_at > 0, "ramp never ended");
+    {   /* every hold is time at temperature, on both clock rules: stage 1 adds the
+         * heat-up from room temperature, later stages a few seconds of heating */
+        int k;
+        static const int hold[4] = { 0, 30, 25, 25 };
+        for (k = 1; k < 4; k++) {
+            int span = r.stage_at[k + 1] - r.stage_at[k];
+            CHECK(span >= hold[k] && span <= hold[k] + (k == 1 ? 45 : 4), "stage %d lasted %d s for a %d s hold", k, span, hold[k]);
+        }
+    }
     printf("  stages start at %ds %ds %ds %ds, dab at %ds (%d s at temp), ended %ds\n",
            r.stage_at[1], r.stage_at[2], r.stage_at[3], r.stage_at[4], r.counted_at, r.at_temp_at_count, r.ended_at);
 }
@@ -343,6 +356,63 @@ static void t_garbage_ram(void)
     CHECK(u16at(sim_struct, TBL_CO_F * 2) == 0 && u16at(sim_struct, TBL_FL_F * 2) == 0, "wrote a slot from garbage");
 }
 
+static void t_heat_cap(void)
+{
+    struct run r;
+    printf("Carta 2 clock, a stage that never reports reached: the heat cap keeps it moving\n");
+    reset_device(1);
+    never_reach = 1;
+    tick();
+    start_session(1, 150, 65, 30);
+    r = run_to_end(1200);
+    CHECK(r.stages_seen == 4, "stalled at %d stages", r.stages_seen);
+    CHECK(r.ended_at > 0, "never ended");
+    CHECK(r.stage_at[2] - r.stage_at[1] >= RAMP_MAX_HEAT_S + 30 - 1, "stage 1 lasted only %d s", r.stage_at[2] - r.stage_at[1]);
+    CHECK(u16at(sim_dab, 2) == 0, "counted a dab with no time at temperature");
+    printf("  ended at %ds\n", r.ended_at);
+}
+
+static void t_picker_timeout(void)
+{
+    volatile ramp_state_t *st;
+    int i;
+    printf("picker closes after 30 s idle, keeping the choice\n");
+    reset_device(0);
+    tick();
+    st = ST();
+    ramp_picker_event(st, 3, 1, 3, 2, 1, 7, 8);
+    ramp_picker_event(st, 2, 1, 3, 2, 1, 7, 8);
+    for (i = 0; i < 29 * TPS; i++) tick();
+    CHECK(st->picker_on, "closed too early");
+    for (i = 0; i < 2 * TPS; i++) tick();
+    CHECK(!st->picker_on && sim_picker_closed == 1, "didn't time out (%d)", sim_picker_closed);
+    CHECK(ramp_selected() == 3, "choice %d not kept", ramp_selected());
+}
+
+static void t_flash_writes(void)
+{
+    volatile ramp_state_t *st;
+    printf("unchanged data costs no flash erase; the store carries a version byte\n");
+    reset_device(0);
+    tick();
+    st = ST();
+    upload(1, 1, 430, 221, 12);
+    CHECK(erases == 1 && flash[RAMP_VER_OFFSET] == RAMP_STORE_VERSION, "erases %d version %d", erases, flash[RAMP_VER_OFFSET]);
+    upload(1, 1, 430, 221, 12);
+    CHECK(erases == 1, "re-upload erased again (%d)", erases);
+    ramp_marker_dispatch(RAMP_OFFSET_MARKER, 5);
+    ramp_marker_dispatch(RAMP_OFFSET_MARKER, 5);
+    CHECK(erases == 2, "same offset erased again (%d)", erases);
+    ramp_picker_event(st, 3, 1, 3, 2, 1, 7, 8);
+    ramp_picker_event(st, 7, 1, 3, 2, 1, 7, 8);
+    CHECK(erases == 2, "unchanged picker exit erased (%d)", erases);
+    ramp_picker_event(st, 3, 1, 3, 2, 1, 7, 8);
+    ramp_picker_event(st, 2, 1, 3, 2, 1, 7, 8);
+    ramp_picker_event(st, 1, 1, 3, 2, 1, 7, 8);
+    ramp_picker_event(st, 7, 1, 3, 2, 1, 7, 8);
+    CHECK(erases == 2, "net-unchanged choice erased (%d)", erases);
+}
+
 int main(void)
 {
     CHECK(sizeof(ramp_state_t) < sizeof sim_state, "state too big");
@@ -357,6 +427,9 @@ int main(void)
     t_step();
     t_announce();
     t_garbage_ram();
+    t_heat_cap();
+    t_picker_timeout();
+    t_flash_writes();
     printf(fails ? "\n%d FAILED\n" : "\nALL HOST TESTS PASSED\n", fails);
     return fails != 0;
 }

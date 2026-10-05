@@ -20,6 +20,7 @@ static void apply_stage(volatile ramp_state_t *st, u8 stage)
     write_slot(st, WP_F(st, stage - 1), WP_C(st, stage - 1));
     STRUCT_BASE[OFF_REACHED] = 0;   /* stock re-targets from the slot */
     st->stage = stage;
+    st->heat_s = 0;
 }
 
 /* ---- dab counting --------------------------------------------------------
@@ -47,9 +48,9 @@ static void count_dab(volatile ramp_state_t *st)
     st->counted = 1;   /* the save is armed in disarm, once the slot is restored */
 }
 
-/* A counted ramp ends here, one second before the stock timer would end it
+/* A multi-stage ramp ends here, one second before the stock timer would end it
  * (which would run the completion bookkeeping a second time). */
-static void end_counted(void)
+static void end_ramp(void)
 {
     volatile u8 *cue = (volatile u8 *)DEV_END_CUE;
     stock_stop();
@@ -189,6 +190,11 @@ static void ramp_tick(void)
 
     ramp_announce_tick(st);
 
+    if (st->picker_on && DEV_SYS_TICK - st->picker_t0 > RAMP_PICKER_TIMEOUT) {
+        ramp_picker_close(st);
+        DEV_PICKER_CLOSED();
+    }
+
     /* A session that starts while the picker is open belongs to the stock
      * code: close the picker, unsaved choice included. The button light is
      * handed back by ramp_led_update on the same tick. */
@@ -229,20 +235,36 @@ static void ramp_tick(void)
     t = FIELD16(OFF_COUNTDOWN);
     if (t != st->last_left && t + 1 != st->last_left)
         FIELD16(OFF_COUNTDOWN) = t = st->last_left;
-    /* one second went by; it counts toward the dab only if the stock
-     * "reached" flag says the heater is at this stage's temperature. On
-     * Aeris and Sport the countdown only moves once reached, so this is
-     * always true there; on the Carta 2 the countdown runs through heat-up. */
-    if (t + 1 == st->last_left && STRUCT_BASE[OFF_REACHED] && st->at_temp_s < 0xffff)
-        st->at_temp_s++;
+    /* One second went by on the stock clock. It counts toward the hold, and
+     * toward the dab, only at temperature (the stock "reached" flag). On Aeris
+     * and Sport the stock clock already waits for that; on the Carta 2 it runs
+     * through heat-up, so the second is given back. After RAMP_MAX_HEAT_S of
+     * heating a stage counts down anyway, so a stage that never reports
+     * reached can't stall the ramp. */
+    if (t + 1 == st->last_left) {
+        if (STRUCT_BASE[OFF_REACHED]) {
+            if (st->at_temp_s < 0xffff)
+                st->at_temp_s++;
+        } else if (st->heat_s < RAMP_MAX_HEAT_S) {
+            st->heat_s++;
+            FIELD16(OFF_COUNTDOWN) = t = st->last_left;
+        }
+    }
     st->last_left = t;
 
     if (t <= 1) {
         if (st->counted) {
-            end_counted();
+            end_ramp();
             return;
         }
-        /* Uncounted (< 3 stages): the stock completion at 0 counts it and arms
+        /* A multi-stage ramp that never qualified for a dab (only possible if
+         * it got no time at temperature) ends the same way, uncounted: the dab
+         * rule is the patch's, not the stock completion's. */
+        if (st->n_stages >= COUNT_MIN_STAGE) {
+            end_ramp();
+            return;
+        }
+        /* Single stage: the stock completion at 0 counts it and arms
          * the save. Give the slot its own values back first, so that save can
          * only ever see them. The heater target is unaffected -- stock reloads
          * it from the slot only while "reached" is 0, which, if it is, means

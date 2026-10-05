@@ -33,6 +33,13 @@
 typedef void (*draw_screen_fn)(unsigned int screen);
 #define stock_draw_screen STOCK_FN(draw_screen_fn, 0xf338)
 
+/* The picker timed out (ramp_core.c): put the stock idle screen back. */
+void ramp_picker_closed_redraw(void)
+{
+    if (STRUCT_BASE[OFF_SCREEN] == 0)
+        stock_draw_screen(0);
+}
+
 void ramp_event_entry(void)
 {
     volatile u8 *mb = EVENT_MAILBOX;

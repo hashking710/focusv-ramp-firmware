@@ -18,6 +18,10 @@ void  sim_flash_write(int addr, int len, void *buf);
 int   sim_notify(int handle, const unsigned char *data, int len);
 
 #define STOCK_FN(type, addr)  ((type)(addr))
+extern unsigned int sim_systick;
+extern int sim_picker_closed;
+#define DEV_SYS_TICK        sim_systick
+#define DEV_PICKER_CLOSED() (sim_picker_closed++)
 
 #define DEV_STRUCT          sim_struct
 #define OFF_SESSION         0x00

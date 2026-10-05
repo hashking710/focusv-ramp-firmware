@@ -26,9 +26,10 @@
  *  own seconds, and the stock session-length limit never cuts a ramp short:
  *  between ticks the countdown may only stay put or drop by one second, and any
  *  other change (a stock reload from the slot's hold time) is undone. The slot's
- *  hold time itself is never touched. (On Aeris and Sport the stock clock only
- *  runs once the target is reached, so each hold is time AT temperature; on the
- *  Carta 2 it runs from the start of each stage.)
+ *  hold time itself is never touched. Every hold is time AT temperature: on
+ *  Aeris and Sport the stock clock only runs once the target is reached; on the
+ *  Carta 2 it runs from the start of each stage, so the ramp gives back each
+ *  second spent heating, up to RAMP_MAX_HEAT_S per stage.
  *
  *  Dab counting. Once a ramp is on stage 2 or later and has run 20 seconds at
  *  temperature (the stock "reached" flag, seconds counted in at_temp_s), the
@@ -121,7 +122,9 @@ typedef void (*flash_write_fn)(int addr, int len, void *buf);
 #define RAMP_ENABLED_OFFSET  RAMP_STORE_SIZE
 #define RAMP_SEL_OFFSET      (RAMP_STORE_SIZE + 1)   /* the chosen built-in preset */
 #define RAMP_OFS_OFFSET      (RAMP_STORE_SIZE + 2)   /* setup offset, signed F */
-#define RAMP_STORE_TOTAL     (RAMP_STORE_SIZE + 3)
+#define RAMP_VER_OFFSET      (RAMP_STORE_SIZE + 3)   /* store layout version */
+#define RAMP_STORE_TOTAL     (RAMP_STORE_SIZE + 4)
+#define RAMP_STORE_VERSION   1                       /* 0xFF (erased) = written before versions */
 
 static inline u8 ramp_enabled(void)
 {
@@ -142,6 +145,20 @@ static inline u8 ramp_enabled(void)
 /* Sent as a SET_TEMP marker with the offset in packet byte 14 (unread by stock
  * firmware; see ramp_marker_entry.s). Byte 14 is zero in every other packet. */
 #define RAMP_OFFSET_MARKER   0xbb
+
+/* The chip's free-running system timer (SDK reg_system_tick, 16 ticks per us;
+ * read throughout the stock image). Wraps every ~268 s, so only differences
+ * are used. */
+#ifndef DEV_SYS_TICK
+#define DEV_SYS_TICK         (*(volatile u32 *)0x800740)
+#endif
+#define RAMP_PICKER_TIMEOUT  (30u * 16u * 1000u * 1000u)   /* 30 s idle in the picker */
+
+/* A stage's hold only counts seconds at temperature (the stock "reached"
+ * flag), on every device. In case a stage never reports reached -- a flag
+ * misread, an atomizer that can't get there -- the hold starts counting anyway
+ * after this many seconds of heating, so a ramp can't stall. */
+#define RAMP_MAX_HEAT_S      120
 u8  ramp_selected(void);
 int ramp_offset(void);
 void ramp_store_set(u8 off, u8 v);
@@ -192,6 +209,8 @@ typedef struct {
     u8  picker_sel;   /* the preset being shown while picker_on */
     u8  picker_dirty; /* picker_sel changed and not yet written to flash */
     u8  picker_enabled; /* the ramp system's on/off, cached while the picker shows */
+    u32 picker_t0;    /* system tick of the picker's last event (timeout) */
+    u16 heat_s;       /* seconds this stage has spent heating, not at temperature */
     u16 ann_tries;    /* announcement send attempts left (ramp_announce.c) */
     u8  ann_enabled;  /* the announcement's fields, captured when it's queued */
     u8  ann_preset;
@@ -251,6 +270,9 @@ void ramp_toggle_enabled(void);
 u8   ramp_default_stages(volatile ramp_state_t *st, u8 sel);
 void ramp_announce_tick(volatile ramp_state_t *st);
 void ramp_picker_close(volatile ramp_state_t *st);
+#ifndef DEV_PICKER_CLOSED
+#define DEV_PICKER_CLOSED()  ((void)0)   /* Carta 2: redraw the stock idle screen */
+#endif
 u8   ramp_picker_event(volatile ramp_state_t *st, int ev, u8 idle,
                        int enter, int next, int prev, int exit, int toggle);
 

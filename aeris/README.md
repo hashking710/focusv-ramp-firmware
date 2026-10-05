@@ -30,7 +30,7 @@ Body:    80,684 bytes (after the 40-byte header), SHA-1 7e3569fabd06...
 
 `apply_patch.py` patches only this exact build. There is no override.
 
-## Patch sites (4, written and checked by `tools/build.py`)
+## Patch sites (5, written and checked by `tools/build.py`)
 
 | Site | Stock | Replaced with |
 | --- | --- | --- |
@@ -38,6 +38,7 @@ Body:    80,684 bytes (after the 40-byte header), SHA-1 7e3569fabd06...
 | 0xb490 | marker-byte load before the A5/AF/66 chain | `ramp_marker_entry`: waypoint upload markers |
 | 0x50d2 | LED-preset click counter's increment+store | `ramp_click_entry`: 4 clicks toggles the ramp system (see above) |
 | 0x645c | call to button-event consumer `0x4ee8` (the only caller) | `ramp_event_entry`: the preset picker, then the stock consumer |
+| 0xb066 | stock send of the `0xAA` dab-counter reply (notify `0xe734`) | `ramp_announce_entry`: sends it unchanged, then announces the patch (`0xBC`) |
 
 The code goes at flash 0x14000 and runs at 0x14028. The waypoint store has its own sector at
 0x15000. The output image ends at 0x20000.

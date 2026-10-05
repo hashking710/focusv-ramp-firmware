@@ -193,6 +193,7 @@ typedef struct {
     u8  picker_dirty; /* picker_sel changed and not yet written to flash */
     u8  btn_active;   /* the control button's light is ours (button_set) */
     u8  btn_saved[3]; /* its stock colour, restored by button_release */
+    u8  announce;     /* signature notify attempts left (ramp_announce.c) */
     u8  hold_flags;   /* Carta 2 only: +/- held-together toggle (ramp_input.c) */
     u8  frame_drawn;  /* display bookkeeping (Carta 2 screen) */
     u8  drawn_fill;
@@ -277,6 +278,7 @@ static inline void button_release(volatile ramp_state_t *st)
 #endif
 void ramp_toggle_enabled(void);
 u8   ramp_default_stages(volatile ramp_state_t *st, u8 sel);
+void ramp_announce_tick(volatile ramp_state_t *st);
 u8   ramp_picker_event(volatile ramp_state_t *st, int ev, u8 idle,
                        int enter, int next, int prev, int exit);
 

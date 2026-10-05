@@ -63,6 +63,15 @@
 
 #define DEV_MAX_F           600      /* official app's concentrate ceiling */
 
+/* Notify path (SDK bls_att_pushNotifyData(handle, data, len), returns 0 when
+ * queued): 0xe734, confirmed by its body building an ATT Handle Value
+ * Notification. Handle 27 is the read/notify characteristic every stock reply
+ * uses. 0xb066 is the stock send of the 0xAA dab-counter reply, which the
+ * patch wraps to announce itself (ramp_announce.c). */
+#define DEV_NOTIFY          0xe734
+#define DEV_NOTIFY_HANDLE   27
+#define DEV_ID              2
+
 /* Button events (consumer 0x4ee8, mailbox 0x845620, UI state 0x84308c+2 = 1
  * on the idle screen). A hold from idle opens the preset picker; single clicks
  * step through the four presets and a hold leaves it. */

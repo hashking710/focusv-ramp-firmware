@@ -108,13 +108,14 @@ real hardware testing confirmed holding + and − together (or all three buttons
 visible on stock firmware, and this patch doesn't change that: whatever stock does, or doesn't do,
 with + or − individually is completely unaffected, during a ramp or not.
 
-## Patch sites (32, all written and checked by `tools/build.py`)
+## Patch sites (33, all written and checked by `tools/build.py`)
 
 | Site(s) | Stock call | Replaced with |
 | --- | --- | --- |
 | 0x6e2e | orchestrator `0xaf2c` (the only caller) | `ramp_trampoline`: stock tick, then the ramp |
 | 0x11d96 | marker-byte load before the A5/AF/66 chain | `ramp_marker_entry`: waypoint upload markers |
 | 0x6d0c | event consumer `0x5618` (the only caller) | `ramp_event_entry` |
+| 0x11562 | stock send of the `0xAA` dab-counter reply (notify `0x15a34`) | `ramp_announce_entry`: sends it unchanged, then announces the patch (`0xBC`) |
 | 0xfa38 / 0xf546 | `0xd3c0` live temperature (full / view) | ramp screen |
 | 0xfa3c / 0xf39c | `0xdcac` session countdown (full / view) | ramp screen |
 | 7 sites | `0xce70` target | hidden during a ramp |

@@ -184,7 +184,10 @@ static void ramp_tick(void)
         st->picker_on = 0;
         st->picker_dirty = 0;
         st->btn_active = 0;
+        st->announce = 0;
     }
+
+    ramp_announce_tick(st);
 
     /* A session that starts while the picker is open belongs to the stock
      * code: close the picker, unsaved choice included. The button light is

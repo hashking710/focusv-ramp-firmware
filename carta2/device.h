@@ -56,6 +56,15 @@
 
 #define DEV_MAX_F           635      /* official app's concentrate ceiling */
 
+/* Notify path (SDK bls_att_pushNotifyData(handle, data, len), returns 0 when
+ * queued): 0x15a34, confirmed by its body building an ATT Handle Value
+ * Notification. Handle 27 is the read/notify characteristic every stock reply
+ * uses. 0x11562 is the stock send of the 0xAA dab-counter reply, which the
+ * patch wraps to announce itself (ramp_announce.c). */
+#define DEV_NOTIFY          0x15a34
+#define DEV_NOTIFY_HANDLE   27
+#define DEV_ID              1
+
 /* Preset picker (ramp_input.c): a hold of - from the idle screen (0) opens it,
  * + and - step through the six presets, a click leaves it. Events are the
  * stock consumer's codes: 1 = - short, 2 = + short, 3 = - held, 7 = click. */

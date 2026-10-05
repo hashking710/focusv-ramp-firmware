@@ -118,6 +118,7 @@ common/ramp_core.c   ramp sequencer: arming, stages, countdown, dab counting
 common/ramp_store.c  waypoint store (0xB1-0xB5 flower, 0xB6-0xBA concentrate)
 common/ramp_presets.c built-in concentrate ramps and the setup offset
 common/ramp_picker.c preset picker state machine, shared by every device
+common/ramp_announce.c `0xBC` announcement after the `0xAA` reply, so the app can detect the patch
 aeris/ramp_event.c, sport/ramp_event.c   button-event hook: the picker, then stock
 <device>/device.h    that device's confirmed addresses, each with the stock code that proves it
 carta2/ramp_display.c, carta2/ramp_input.c   Carta 2 screen and buttons
@@ -129,9 +130,9 @@ tools/build.py                               build + verification
 
 | Device | Firmware build | Patch sites | Code / waypoint sector |
 | --- | --- | --- | --- |
-| [`carta2/`](carta2/) | PROD-111224 | 32 | 0x30000 / 0x32000 |
-| [`aeris/`](aeris/) | PROD-111224 | 4 | 0x14000 / 0x15000 |
-| [`sport/`](sport/) | PROD-030426 | 4 | 0x18000 / 0x19000 |
+| [`carta2/`](carta2/) | PROD-111224 | 33 | 0x30000 / 0x32000 |
+| [`aeris/`](aeris/) | PROD-111224 | 5 | 0x14000 / 0x15000 |
+| [`sport/`](sport/) | PROD-030426 | 5 | 0x18000 / 0x19000 |
 
 ## History
 

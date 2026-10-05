@@ -31,17 +31,30 @@ Body:    90,860 bytes (after the 40-byte header), SHA-1 4b57f086a175...
 
 `apply_patch.py` patches only this exact build. There is no override.
 
-## Patch sites (3, written and checked by `tools/build.py`)
+## Patch sites (4, written and checked by `tools/build.py`)
 
 | Site | Stock | Replaced with |
 | --- | --- | --- |
 | 0x58b0 | call to orchestrator `0x7c00` (the only caller) | `ramp_trampoline`: stock tick, the ramp, then the LEDs |
 | 0xb002 | marker-byte load before the A5/AF/66 chain | `ramp_marker_entry`: waypoint upload markers |
 | 0x47a4 | LED-preset click counter's increment+store | `ramp_click_entry`: 4 clicks toggles the ramp system (see above) |
+| 0x58a8 | call to button-event consumer `0x45cc` (the only caller) | `ramp_event_entry`: the preset picker, then the stock consumer |
 
 The code goes at flash 0x18000 and runs at 0x18028. The waypoint store has its own sector at
 0x19000. The output image ends at 0x20000. An earlier version put the waypoint store at 0x18000,
 the same address as its own code, so the first save would have erased the patch.
+
+## Preset picker
+
+A hold from the idle screen (the state that shows the temperature) opens the picker. Single clicks step
+through the first four built-in presets (Flavor first, Rosin, Balanced, Sauce; Balanced is the default),
+and the LEDs show the selection: one lit LED per preset, up to the chosen one. A hold leaves the picker
+and keeps the choice in flash. The picker is consumed before the stock handler sees its events, so the
+stock clicks and holds are unchanged outside it.
+
+A hold from idle, with no picker open, would otherwise increment the shared gesture counter at struct
+`+0x60` (the counter the click gestures use), so the hook takes it. The picker only opens with no session
+running and with the ramp system on.
 
 ## On/off switch: four clicks
 

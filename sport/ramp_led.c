@@ -28,15 +28,16 @@ static const u8 STOP_R[5] = {  60, 140, 220, 255, 255 };
 static const u8 STOP_G[5] = {  90,  70,  60, 120, 215 };
 static const u8 STOP_B[5] = { 255, 230, 160,  60,  60 };
 
-/* Preset picker: one LED per preset position, lit up to the chosen preset. */
-static void show_selection(u8 sel)
+/* Preset picker: one LED per preset position, lit up to the chosen preset; with
+ * the ramp system off, every LED is dim red instead. */
+static void show_selection(u8 sel, u8 enabled)
 {
     int i;
     for (i = 0; i < LED_COUNT; i++) {
         u8 on = i <= sel;
-        LED_RGB[i * 3 + 0] = on ? RAMP_PICK_R : 0;
-        LED_RGB[i * 3 + 1] = on ? RAMP_PICK_G : 0;
-        LED_RGB[i * 3 + 2] = on ? RAMP_PICK_B : 0;
+        LED_RGB[i * 3 + 0] = enabled ? (on ? RAMP_PICK_R : 0) : 60;
+        LED_RGB[i * 3 + 1] = enabled ? (on ? RAMP_PICK_G : 0) : 0;
+        LED_RGB[i * 3 + 2] = enabled ? (on ? RAMP_PICK_B : 0) : 0;
     }
     led_push();
 }
@@ -47,13 +48,13 @@ void ramp_led_update(void)
     int lo = 0x7fff, hi = 0, f, frac, x, seg, t, lit, i;
     u8 r, g, b;
 
-    if (LED_ENABLED == 0 || !(ramp_active(st) || st->picker_on)) {
-        button_release(st);
+    if (st->picker_on && !ramp_active(st) && !DEV_IDLE())
+        ramp_picker_close(st);   /* asleep, or off the idle state: stop showing it */
+    if (LED_ENABLED == 0)
         return;
-    }
     if (!ramp_active(st)) {
-        show_selection(st->picker_sel);
-        button_set(st, RAMP_PICK_R, RAMP_PICK_G, RAMP_PICK_B);
+        if (st->picker_on)
+            show_selection(st->picker_sel, st->picker_enabled);
         return;
     }
 
@@ -81,5 +82,4 @@ void ramp_led_update(void)
         LED_RGB[i * 3 + 2] = on ? b : 0;
     }
     led_push();
-    button_set(st, r, g, b);
 }

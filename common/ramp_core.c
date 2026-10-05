@@ -183,8 +183,8 @@ static void ramp_tick(void)
         st->arm_failed = 0;
         st->picker_on = 0;
         st->picker_dirty = 0;
-        st->btn_active = 0;
-        st->announce = 0;
+        st->picker_enabled = 0;
+        st->ann_tries = 0;
     }
 
     ramp_announce_tick(st);

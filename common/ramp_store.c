@@ -78,10 +78,8 @@ void ramp_marker_dispatch(u8 marker, u8 byte14)
                       *PRESET(TBL_CO_HOLD, 0));
 }
 
-/* Flips the enabled byte via the exact same read-whole-sector / erase /
- * write-back cycle save_waypoint() uses, so it can never land on a half
- * state. Called only from a device's ramp_click_entry.s, on a quadruple
- * click of its single button -- see ramp_enabled() in ramp.h. */
+/* Sets one byte of the store via the same read-whole-sector / erase /
+ * write-back cycle save_waypoint() uses, so it can never land on a half state. */
 void ramp_store_set(u8 off, u8 v)
 {
     u8 buf[RAMP_STORE_TOTAL];
@@ -123,22 +121,4 @@ int ramp_offset(void)
     if (v < RAMP_OFS_MIN_F) v = RAMP_OFS_MIN_F;
     if (v > RAMP_OFS_MAX_F) v = RAMP_OFS_MAX_F;
     return v;
-}
-
-/* Called from ramp_click_entry.s every click in place of the two stock
- * instructions that increment and store the LED-preset counter (0-5) --
- * base/off together are that field's address, so this replicates them
- * exactly first. 1-3 then return having done nothing else -- LED preset
- * cycling still works normally. Landing on 4 is repurposed: instead of
- * selecting whichever LED preset 4 happens to be (the user doesn't want
- * that kept), it toggles the ramp system and resets the counter to 0,
- * matching "0 = LEDs off" so preset 4 is never actually applied. */
-void ramp_click_dispatch(volatile u8 *base, u8 off)
-{
-    u8 count = (u8)(base[off] + 1);
-    base[off] = count;
-    if (count != 4)
-        return;
-    base[off] = 0;
-    ramp_toggle_enabled();
 }

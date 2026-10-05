@@ -31,13 +31,12 @@ Body:    90,860 bytes (after the 40-byte header), SHA-1 4b57f086a175...
 
 `apply_patch.py` patches only this exact build. There is no override.
 
-## Patch sites (5, written and checked by `tools/build.py`)
+## Patch sites (4, written and checked by `tools/build.py`)
 
 | Site | Stock | Replaced with |
 | --- | --- | --- |
 | 0x58b0 | call to orchestrator `0x7c00` (the only caller) | `ramp_trampoline`: stock tick, the ramp, then the LEDs |
 | 0xb002 | marker-byte load before the A5/AF/66 chain | `ramp_marker_entry`: waypoint upload markers |
-| 0x47a4 | LED-preset click counter's increment+store | `ramp_click_entry`: 4 clicks toggles the ramp system (see above) |
 | 0x58a8 | call to button-event consumer `0x45cc` (the only caller) | `ramp_event_entry`: the preset picker, then the stock consumer |
 | 0xa9ea | stock send of the `0xAA` dab-counter reply (notify `0xec3c`) | `ramp_announce_entry`: sends it unchanged, then announces the patch (`0xBC`) |
 
@@ -45,48 +44,30 @@ The code goes at flash 0x18000 and runs at 0x18028. The waypoint store has its o
 0x19000. The output image ends at 0x20000. An earlier version put the waypoint store at 0x18000,
 the same address as its own code, so the first save would have erased the patch.
 
-## Preset picker
+## Preset picker and on/off
 
-A hold from the idle screen (the state that shows the temperature) opens the picker. Single clicks step
-through the first four built-in presets (Flavor first, Rosin, Balanced, Sauce; Balanced is the default),
-and the LEDs show the selection: one lit LED per preset, up to the chosen one. A hold leaves the picker
-and keeps the choice in flash. The picker is consumed before the stock handler sees its events, so the
-stock clicks and holds are unchanged outside it.
+From the idle state (no session), **hold the button** to open the picker. Inside it:
 
-A hold from idle, with no picker open, would otherwise increment the shared gesture counter at struct
-`+0x60` (the counter the click gestures use), so the hook takes it. The picker only opens with no session
-running and with the ramp system on.
+- **single click**: next built-in preset (Flavor first, Rosin, Balanced, Sauce; Balanced by default),
+  shown as one lit blue LED per position, up to the chosen one;
+- **triple click**: switch the ramp system on or off -- with it off, every LED is dim red;
+- **hold**: leave, saving the choice in flash.
 
-## Button light
+The picker opens even when the system is off, so it can be switched back on. While the system is
+off, no ramp arms and no stage or offset is saved. The picker closes, passing the event on, as soon
+as the device leaves the idle state (sleep, a session). Its events never reach the stock handler,
+so the stock gestures are unchanged outside it: a click cycles the temperature preset, a triple
+click cycles the LED preset, four clicks show the battery. In the idle state a stock hold does
+nothing (it only stops a running session), so the picker's hold doesn't shadow a stock gesture.
 
-The control button has its own light. During a ramp it shows the same temperature colour as the LEDs
-(blue at the coolest stage, through violet, magenta and orange, to gold at the hottest). While the
-preset picker is open it shows the selected preset's colour, the same blue as the LED selection. The
-light follows the LED setting: with LEDs off it shows nothing and the stock colour is left alone.
+Like stock, the picker ignores button events during the power-on transition (struct `+8` set and
+`+10` == 1, which the stock consumer also checks). It follows the LED setting: with LEDs off, the
+picker still works but shows nothing.
 
-The patch writes the light's three colour bytes each tick, after the stock tick has run, and the
-stock button routine drives the light from them. The stock colour is saved the first time the patch
-takes the light and put back when the ramp or picker stops using it. This relies on the stock button
-routine running on each tick, which has been traced in the code but not confirmed on hardware.
-
-## On/off switch: four clicks
-
-Click the button four times in a row (the same gesture that otherwise cycles through the
-device's 5 LED presets, 1 at a time) to toggle the whole ramp system on or off, directly on the
-device, no app needed:
-
-- **Off**: no new ramp can arm, and no new waypoint can be saved -- a stage-save packet is
-  dropped with no flash write at all, the same as on stock firmware. A ramp already running
-  finishes or stops normally; it isn't interrupted.
-- **On**: back to normal.
-
-It's stored as one more byte in the same flash sector as the waypoints, so it survives a power
-cycle. A device that's never had this toggled reads as **on** -- today's behaviour, unchanged.
-
-Landing on the 4th click is repurposed, not just read: the click counter resets to 0 right then
-(matching "0 = LEDs off"), so LED preset 4 itself is never actually selected -- whatever it was
-factory-set to never lights up. Clicks 1-3 are completely untouched; the normal preset cycling
-through 1-5 still works exactly as it does on stock firmware for those.
+**Not done: the button light.** The control button has its own light, but the stock LED effects
+write its colour and output it within the same call, every tick, so a colour the patch writes
+afterwards is never shown. Driving it needs a hook on that output path; until then the patch leaves
+the light alone.
 
 ## Device-specific behaviour, confirmed from the code that uses it
 

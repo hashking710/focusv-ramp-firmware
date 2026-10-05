@@ -74,7 +74,8 @@
 
 /* Button events (consumer 0x4ee8, mailbox 0x845620, UI state 0x84308c+2 = 1
  * on the idle screen). A hold from idle opens the preset picker; single clicks
- * step through the four presets and a hold leaves it. */
+ * step through the four presets, a triple click switches the ramp system on or
+ * off, and a hold leaves it. */
 #define DEV_EV_MB           0x845620
 #define DEV_EV_CONSUMER     0x4ee8
 #define DEV_UI_STATE_ADDR   0x84308e
@@ -83,9 +84,12 @@
 #define DEV_PICK_NEXT       7
 #define DEV_PICK_PREV       (-1)
 #define DEV_PICK_EXIT       15
+#define DEV_PICK_TOGGLE     9      /* triple click: ramp system on / off */
+/* The stock consumer drops every event while 0x84308c+7 is set and +9 == 1
+ * (the power-on transition); the picker honours the same gate. */
+#define DEV_EV_IGNORED()    ((*(volatile u8 *)(0x84308c + 7)) != 0 && (*(volatile u8 *)(0x84308c + 9)) == 1)
+#define DEV_IDLE()          ((*(volatile u8 *)DEV_UI_STATE_ADDR) == 1 && STRUCT_BASE[OFF_SESSION] == 0)
 
-/* The control button's light: stock colour bytes, read by the button effect 0xac38 */
-#define DEV_BTN_RGB         0x845635
 
 struct ramp_state_s;
 void ramp_led_update(void);

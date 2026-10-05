@@ -17,21 +17,17 @@
  * Up/down are consumed rather than passed on, so the stock edit screen -- which
  * would rewrite the active preset slot mid-ramp -- can't be entered.
  *
- * On/off switch, any time (not gated on a ramp being active, like Aeris and
- * Sport's quadruple click): holding + and - together toggles the whole ramp
- * system. Tracked from the same + / - press/held events above, independent of
- * whatever the stock decoder does with the raw combo itself -- confirmed on
- * real hardware to show nothing on screen either way -- so this only reads
- * the event, never consumes it; stock behaviour for every individual event is
- * completely unaffected.
+ * Preset picker (ramp_picker.c), when no ramp is running: a hold of - on the
+ * idle screen (0) opens it; + / - step through the presets, a double click
+ * switches the ramp system on or off, a click leaves. It's drawn from here on
+ * every change (stock doesn't redraw the idle screen for consumed events) and
+ * from the 0xce70 hook when stock redraws it.
  */
 #include "ramp.h"
 
 #define EVENT_MAILBOX        ((volatile u8 *)0x84319c)
 #define orig_event_consumer  STOCK_FN(void_fn, 0x5618)
 
-#define HOLD_MINUS 1
-#define HOLD_PLUS  2
 #define SCREEN_HEATING 5
 
 typedef void (*draw_screen_fn)(unsigned int screen);
@@ -41,18 +37,6 @@ void ramp_event_entry(void)
 {
     volatile u8 *mb = EVENT_MAILBOX;
     volatile ramp_state_t *st = RAMP_STATE;
-
-    if (mb[1] && st->magic == RAMP_MAGIC) {
-        u8 ev = mb[0];
-        if (ev == 1 || ev == 3) st->hold_flags |= HOLD_MINUS;
-        else if (ev == 2 || ev == 4) st->hold_flags |= HOLD_PLUS;
-        else st->hold_flags = 0;   /* any other event: the hold ended */
-
-        if (st->hold_flags == (HOLD_MINUS | HOLD_PLUS)) {
-            st->hold_flags = 0;
-            ramp_toggle_enabled();
-        }
-    }
 
     if (mb[1] && ramp_active(st)) {
         u8 ev = mb[0];
@@ -72,10 +56,12 @@ void ramp_event_entry(void)
     if (mb[1]) {
         u8 idle = STRUCT_BASE[OFF_SCREEN] == 0 && STRUCT_BASE[OFF_SESSION] == 0;
         u8 was_on = st->picker_on;
-        if (ramp_picker_event(st, mb[0], idle,
-                              DEV_PICK_ENTER, DEV_PICK_NEXT, DEV_PICK_PREV, DEV_PICK_EXIT)) {
+        if (ramp_picker_event(st, mb[0], idle, DEV_PICK_ENTER, DEV_PICK_NEXT,
+                              DEV_PICK_PREV, DEV_PICK_EXIT, DEV_PICK_TOGGLE)) {
             mb[1] = 0;
-            if (was_on && !st->picker_on)
+            if (st->picker_on)
+                ramp_picker_draw(st->picker_sel, st->picker_enabled);
+            else if (was_on)
                 stock_draw_screen(0);
             return;
         }

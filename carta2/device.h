@@ -66,13 +66,15 @@
 #define DEV_ID              1
 
 /* Preset picker (ramp_input.c): a hold of - from the idle screen (0) opens it,
- * + and - step through the six presets, a click leaves it. Events are the
+ * + and - step through the six presets, a double click switches the ramp
+ * system on or off, a click leaves it. Events are the
  * stock consumer's codes: 1 = - short, 2 = + short, 3 = - held, 7 = click. */
 #define DEV_PICK_COUNT      6
 #define DEV_PICK_ENTER      3
 #define DEV_PICK_NEXT       2
 #define DEV_PICK_PREV       1
 #define DEV_PICK_EXIT       7
+#define DEV_PICK_TOGGLE     8      /* double click: ramp system on / off */
 
 #define DEV_AFTER_TICK(st)  ((void)0)   /* the screen draws from its own hooks */
 

@@ -25,11 +25,11 @@ by, or sponsored by Focus V.
 - **Ramps from Terpline or the device.** Terpline uploads up to 5 stages per mode (flower /
   concentrate), each a temperature plus a hold time, stored in their own flash sector. The device
   also ships six built-in concentrate ramps (the same profiles as Terpline's presets).
-- **Choosing a built-in ramp on the device.** A hold from the idle screen opens the picker, and
-  the choice is kept across power cycles. Carta 2: hold − and the + / − buttons step through the
-  six presets, a click leaves the picker. Aeris and Sport: single clicks step through the first
-  four presets, and the LEDs show which one is selected; a hold leaves the picker. Outside the
-  picker, the stock buttons behave exactly as before.
+- **Choosing a built-in ramp, and on/off, on the device.** A hold from idle opens a picker (Carta 2:
+  hold −). Carta 2: + / − step through six presets, double click switches the ramp system on or off,
+  click leaves. Aeris and Sport: single clicks step through four presets on the LEDs, triple click
+  switches on or off, hold leaves. The choice and the on/off state are kept in flash. Outside the
+  picker, every stock gesture behaves as before.
 - **Starting a ramp** is an ordinary session started at a sentinel temperature (150 °F). If
   usable stages are saved for the attached atomizer's mode, the device runs them. Otherwise, in
   concentrate mode, it runs the selected built-in preset, and in flower mode it's a normal stock
@@ -106,6 +106,10 @@ stops it:
 
 Then `python3 <device>/apply_patch.py --input your-file.bin --output patched.bin`.
 
+`sh tools/hosttest/run.sh` (Docker) compiles the shared code for a PC and runs it against a model
+of the stock firmware: whole ramps under both countdown rules (Aeris/Sport and Carta 2), dab counting,
+the store and its markers, the picker, the offset, the announcement, and power-on RAM.
+
 What none of this proves is behaviour on a real device: timing, the screen, the LEDs, and the
 stock code paths the patch relies on but that were read rather than run. Bench testing on
 hardware is the remaining step.
@@ -120,6 +124,7 @@ common/ramp_presets.c built-in concentrate ramps and the setup offset
 common/ramp_picker.c preset picker state machine, shared by every device
 common/ramp_announce.c `0xBC` announcement after the `0xAA` reply, so the app can detect the patch
 aeris/ramp_event.c, sport/ramp_event.c   button-event hook: the picker, then stock
+tools/hosttest/                              host tests: the shared code against a model of the stock firmware
 <device>/device.h    that device's confirmed addresses, each with the stock code that proves it
 carta2/ramp_display.c, carta2/ramp_input.c   Carta 2 screen and buttons
 aeris/ramp_led.c, sport/ramp_led.c           LED progress
@@ -131,8 +136,8 @@ tools/build.py                               build + verification
 | Device | Firmware build | Patch sites | Code / waypoint sector |
 | --- | --- | --- | --- |
 | [`carta2/`](carta2/) | PROD-111224 | 33 | 0x30000 / 0x32000 |
-| [`aeris/`](aeris/) | PROD-111224 | 5 | 0x14000 / 0x15000 |
-| [`sport/`](sport/) | PROD-030426 | 5 | 0x18000 / 0x19000 |
+| [`aeris/`](aeris/) | PROD-111224 | 4 | 0x14000 / 0x15000 |
+| [`sport/`](sport/) | PROD-030426 | 4 | 0x18000 / 0x19000 |
 
 ## History
 

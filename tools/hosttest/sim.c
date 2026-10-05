@@ -1,0 +1,362 @@
+/* sim.c -- host tests for the shared ramp code (the common/ sources).
+ *
+ * Models the stock behaviour the patch relies on, as traced in each device.h:
+ *   - while "reached" is 0 the orchestrator reloads its target from the active
+ *     preset slot; the heater moves toward it (1 F per tick here);
+ *   - "reached" is set once the measured temperature is at the target;
+ *   - the session countdown ticks once a second -- only while reached on Aeris
+ *     and Sport, always on the Carta 2 (sim_carta_timing);
+ *   - at zero the stock timer counts the session and stops it.
+ * Then drives whole ramps, the picker, the store, the offset marker and the
+ * announcement through the real patch code, and checks the results.
+ *
+ * Run from the repo root: sh tools/hosttest/run.sh
+ */
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include "ramp.h"
+
+/* entry points normally reached only from the assembly hooks */
+void ramp_trampoline(void);
+void ramp_marker_dispatch(u8 marker, u8 byte14);
+int  ramp_announce_entry(int handle, const u8 *data, int len);
+
+unsigned char sim_struct[256];
+unsigned char sim_dab[64];
+unsigned char sim_cue[16];
+unsigned char sim_state[1024] __attribute__((aligned(8)));
+
+static unsigned char flash[0x1000];
+static int carta_timing;     /* 1: countdown runs through heat-up (Carta 2) */
+static int tick_no;
+static int notify_busy;      /* sim_notify refuses this many packets first */
+static unsigned char last_pkt[32];
+static int last_len, notify_ok;
+static int fails;
+
+#define TPS 10               /* main-loop ticks per second */
+
+#define CHECK(c, ...) do { if (!(c)) { fails++; printf("  FAIL %s:%d ", __FILE__, __LINE__); printf(__VA_ARGS__); printf("\n"); } } while (0)
+
+static unsigned short u16at(unsigned char *b, int off) { return (unsigned short)(b[off] | b[off + 1] << 8); }
+static void set16(unsigned char *b, int off, int v) { b[off] = (unsigned char)v; b[off + 1] = (unsigned char)(v >> 8); }
+
+/* ---- stock stand-ins ------------------------------------------------------ */
+short sim_div(int a, int b) { return (short)(a / b); }
+
+void sim_flash_read(int addr, int len, void *buf) { memcpy(buf, flash + (addr - DEV_RAMP_FLASH), len); }
+void sim_flash_erase(int addr) { memset(flash + (addr - DEV_RAMP_FLASH), 0xff, 0x1000); }
+void sim_flash_write(int addr, int len, void *buf)
+{
+    int i;
+    for (i = 0; i < len; i++)   /* NOR: a write can only clear bits */
+        flash[addr - DEV_RAMP_FLASH + i] &= ((unsigned char *)buf)[i];
+}
+
+int sim_notify(int handle, const unsigned char *data, int len)
+{
+    if (notify_busy > 0) { notify_busy--; return 0x81; }
+    if (handle == 27 && len <= 32) { memcpy(last_pkt, data, len); last_len = len; notify_ok++; }
+    return 0;
+}
+
+static int conc(void) { return sim_struct[0x06] != 1; }
+static int rank(void) { return sim_struct[conc() ? 0x08 : 0x07]; }
+static int slot_f(void) { return u16at(sim_struct, ((rank() + (conc() ? TBL_CO_F : TBL_FL_F)) * 2)); }
+
+void sim_stop(void) { sim_struct[OFF_SESSION] = 0; }
+
+static int target_f;
+void sim_pid_tick(void)
+{
+    int meas;
+    if (!sim_struct[OFF_SESSION])
+        return;
+    if (!sim_struct[OFF_REACHED])
+        target_f = slot_f();
+    meas = u16at(sim_struct, OFF_MEAS_F);
+    if (meas < target_f) meas++;
+    else if (meas > target_f) meas--;
+    set16(sim_struct, OFF_MEAS_F, meas);
+    if (!sim_struct[OFF_REACHED] && meas == target_f)
+        sim_struct[OFF_REACHED] = 1;
+    if (tick_no % TPS == 0 && (carta_timing || sim_struct[OFF_REACHED])) {
+        int left = u16at(sim_struct, OFF_COUNTDOWN);
+        if (left > 0) set16(sim_struct, OFF_COUNTDOWN, --left);
+        if (left == 0) {    /* stock completion: count, arm the save, stop */
+            int base = conc() ? 2 : 0;
+            set16(sim_dab, base, u16at(sim_dab, base) + 1);
+            sim_dab[31] = 200; sim_dab[32] = 250;
+            sim_stop();
+        }
+    }
+}
+
+/* ---- helpers ----------------------------------------------------------------- */
+static void reset_device(int carta)
+{
+    memset(sim_struct, 0, sizeof sim_struct);
+    memset(sim_dab, 0, sizeof sim_dab);
+    memset(sim_cue, 0, sizeof sim_cue);
+    memset(sim_state, 0xa7, sizeof sim_state);      /* power-on garbage */
+    memset(flash, 0xff, sizeof flash);
+    carta_timing = carta;
+    sim_struct[0x04] = 0;   /* F scale */
+    tick_no = 0;
+    notify_busy = 0; notify_ok = 0; last_len = 0;
+}
+
+static volatile ramp_state_t *ST(void) { return RAMP_STATE; }
+
+static void tick(void) { tick_no++; ramp_trampoline(); }
+
+/* a session on custom slot 0 at temperature f with hold h seconds */
+static void start_session(int is_conc, int f, int c, int hold)
+{
+    int b = is_conc ? TBL_CO_F : TBL_FL_F, bc = is_conc ? TBL_CO_C : TBL_FL_C, bh = is_conc ? TBL_CO_HOLD : TBL_FL_HOLD;
+    sim_struct[0x06] = is_conc ? 2 : 1;
+    sim_struct[is_conc ? 0x08 : 0x07] = 0;
+    set16(sim_struct, (0 + b) * 2, f);
+    set16(sim_struct, (0 + bc) * 2, c);
+    set16(sim_struct, (0 + bh) * 2, hold);
+    set16(sim_struct, OFF_COUNTDOWN, hold);
+    set16(sim_struct, OFF_MEAS_F, 77);
+    sim_struct[OFF_REACHED] = 0;
+    sim_struct[OFF_SESSION] = 1;
+}
+
+/* the app's stage save: the stock handler writes the custom slot, then the marker */
+static void upload(int is_conc, int stage, int f, int c, int hold)
+{
+    int b = is_conc ? TBL_CO_F : TBL_FL_F, bc = is_conc ? TBL_CO_C : TBL_FL_C, bh = is_conc ? TBL_CO_HOLD : TBL_FL_HOLD;
+    set16(sim_struct, b * 2, f);
+    set16(sim_struct, bc * 2, c);
+    set16(sim_struct, bh * 2, hold);
+    ramp_marker_dispatch((u8)((is_conc ? 0xb6 : 0xb1) + stage - 1), 0);
+}
+
+struct run { int stage_at[6]; int stage_temp[6]; int stages_seen; int counted_at; int ended_at; int at_temp_at_count; };
+
+/* runs until the session ends (or a cap), recording when each stage begins */
+static struct run run_to_end(int cap_s)
+{
+    struct run r;
+    int last_stage = 0, i;
+    memset(&r, 0, sizeof r);
+    r.counted_at = -1; r.ended_at = -1;
+    for (i = 0; i < cap_s * TPS; i++) {
+        tick();
+        if (ST()->magic == RAMP_MAGIC && ST()->stage != last_stage && ST()->stage) {
+            last_stage = ST()->stage;
+            if (last_stage <= 5) { r.stage_at[last_stage] = tick_no / TPS; r.stage_temp[last_stage] = slot_f(); }
+            r.stages_seen++;
+        }
+        if (r.counted_at < 0 && ST()->counted) { r.counted_at = tick_no / TPS; r.at_temp_at_count = ST()->at_temp_s; }
+        if (!sim_struct[OFF_SESSION]) { r.ended_at = tick_no / TPS; break; }
+    }
+    for (i = 0; i < 20; i++) tick();    /* let disarm run */
+    return r;
+}
+
+/* ---- tests ------------------------------------------------------------------- */
+static void t_default_preset(int carta)
+{
+    struct run r;
+    printf("default preset (Balanced) in concentrate, %s timing\n", carta ? "Carta 2" : "Aeris/Sport");
+    reset_device(carta);
+    tick();
+    start_session(1, 150, 65, 30);
+    r = run_to_end(400);
+    CHECK(r.stages_seen == 4, "stages seen %d", r.stages_seen);
+    CHECK(r.stage_temp[1] == 455 && r.stage_temp[2] == 470 && r.stage_temp[3] == 485 && r.stage_temp[4] == 505,
+          "stage temps %d %d %d %d", r.stage_temp[1], r.stage_temp[2], r.stage_temp[3], r.stage_temp[4]);
+    CHECK(r.counted_at >= 0, "dab never counted");
+    CHECK(r.at_temp_at_count >= 20, "counted with only %d s at temperature", r.at_temp_at_count);
+    CHECK(u16at(sim_dab, 2) == 1 && u16at(sim_dab, 0) == 0, "conc dab counter %d flower %d", u16at(sim_dab, 2), u16at(sim_dab, 0));
+    CHECK(sim_dab[31] == 200 && sim_dab[32] == 250, "save not armed");
+    CHECK(u16at(sim_struct, TBL_CO_F * 2) == 150, "slot not restored: %d", u16at(sim_struct, TBL_CO_F * 2));
+    CHECK(r.ended_at > 0, "ramp never ended");
+    printf("  stages start at %ds %ds %ds %ds, dab at %ds (%d s at temp), ended %ds\n",
+           r.stage_at[1], r.stage_at[2], r.stage_at[3], r.stage_at[4], r.counted_at, r.at_temp_at_count, r.ended_at);
+}
+
+static void t_flower_no_default(void)
+{
+    struct run r;
+    printf("flower sentinel with nothing saved: plain session\n");
+    reset_device(0);
+    tick();
+    start_session(0, 150, 65, 5);
+    r = run_to_end(200);
+    CHECK(r.stages_seen == 0, "a ramp ran in flower (%d stages)", r.stages_seen);
+    CHECK(u16at(sim_dab, 0) == 1, "stock completion should count it once: %d", u16at(sim_dab, 0));
+}
+
+static void t_upload_precedence(void)
+{
+    struct run r;
+    printf("uploaded stages win over the default; stage 1 clears 2-5\n");
+    reset_device(0);
+    tick();
+    upload(1, 1, 400, 204, 10); upload(1, 2, 420, 216, 10); upload(1, 3, 440, 227, 10);
+    upload(1, 1, 430, 221, 12); upload(1, 2, 450, 232, 12);   /* shorter second upload */
+    start_session(1, 150, 65, 30);
+    r = run_to_end(300);
+    CHECK(r.stages_seen == 2, "stages %d (stale stage 3 survived?)", r.stages_seen);
+    CHECK(r.stage_temp[1] == 430 && r.stage_temp[2] == 450, "temps %d %d", r.stage_temp[1], r.stage_temp[2]);
+    CHECK(u16at(sim_dab, 2) == 1, "dab counted %d times", u16at(sim_dab, 2));
+}
+
+static void t_unusable_store(void)
+{
+    struct run r;
+    printf("an unusable upload is refused, and doesn't fall back to the default\n");
+    reset_device(0);
+    tick();
+    upload(1, 1, 700, 371, 10);        /* above the concentrate ceiling */
+    start_session(1, 150, 65, 5);
+    r = run_to_end(200);
+    CHECK(r.stages_seen == 0, "armed on a bad store");
+}
+
+static void t_offset(void)
+{
+    struct run r;
+    printf("offset marker: +15 on Clouds merges the two 520 F stages\n");
+    reset_device(0);
+    tick();
+    ramp_marker_dispatch(RAMP_OFFSET_MARKER, 15);
+    ramp_marker_dispatch(RAMP_OFFSET_MARKER, (u8)(signed char)40);   /* out of range: ignored */
+    CHECK(ramp_offset() == 15, "offset %d", ramp_offset());
+    ramp_store_set(RAMP_SEL_OFFSET, 5);                              /* Clouds */
+    start_session(1, 150, 65, 30);
+    r = run_to_end(300);
+    CHECK(r.stages_seen == 3, "stages %d", r.stages_seen);
+    CHECK(r.stage_temp[1] == 485 && r.stage_temp[2] == 505 && r.stage_temp[3] == 520,
+          "temps %d %d %d", r.stage_temp[1], r.stage_temp[2], r.stage_temp[3]);
+    ramp_marker_dispatch(RAMP_OFFSET_MARKER, (u8)(signed char)-10);
+    CHECK(ramp_offset() == -10, "negative offset %d", ramp_offset());
+}
+
+static void t_picker(void)
+{
+    struct run r;
+    volatile ramp_state_t *st;
+    printf("picker: open, step, toggle, leave; closes when not idle\n");
+    reset_device(0);
+    tick();
+    st = ST();
+    CHECK(ramp_picker_event(st, 3, 1, 3, 2, 1, 7, 8) == 1 && st->picker_on, "didn't open");
+    CHECK(st->picker_sel == RAMP_DEFAULT_PRESET, "starts at %d", st->picker_sel);
+    ramp_picker_event(st, 2, 1, 3, 2, 1, 7, 8);
+    ramp_picker_event(st, 2, 1, 3, 2, 1, 7, 8);
+    ramp_picker_event(st, 2, 1, 3, 2, 1, 7, 8);
+    ramp_picker_event(st, 2, 1, 3, 2, 1, 7, 8);
+    CHECK(st->picker_sel == 0, "wrap: %d", st->picker_sel);
+    ramp_picker_event(st, 1, 1, 3, 2, 1, 7, 8);
+    CHECK(st->picker_sel == 5, "back-wrap: %d", st->picker_sel);
+    CHECK(ramp_picker_event(st, 4, 1, 3, 2, 1, 7, 8) == 1, "other events must be swallowed");
+    ramp_picker_event(st, 8, 1, 3, 2, 1, 7, 8);                  /* toggle off */
+    CHECK(!ramp_enabled() && !st->picker_enabled, "toggle off failed");
+    ramp_picker_event(st, 7, 1, 3, 2, 1, 7, 8);                  /* leave */
+    CHECK(!st->picker_on && ramp_selected() == 5, "selection %d not saved", ramp_selected());
+    start_session(1, 150, 65, 3);
+    r = run_to_end(100);
+    CHECK(r.stages_seen == 0, "armed while the system is off");
+    CHECK(ramp_picker_event(st, 3, 1, 3, 2, 1, 7, 8) == 1, "picker must open while off");
+    ramp_picker_event(st, 8, 1, 3, 2, 1, 7, 8);                  /* toggle on */
+    CHECK(ramp_enabled(), "toggle on failed");
+    CHECK(ramp_picker_event(st, 2, 0, 3, 2, 1, 7, 8) == 0 && !st->picker_on, "must close and pass through when not idle");
+    CHECK(ramp_picker_event(st, 3, 0, 3, 2, 1, 7, 8) == 0, "must not open when not idle");
+    start_session(1, 150, 65, 30);
+    ramp_picker_event(st, 3, 1, 3, 2, 1, 7, 8);
+    tick(); tick();
+    CHECK(!st->picker_on || ramp_active(st), "picker still open in a session");
+    r = run_to_end(300);
+    CHECK(r.stage_temp[1] == 470 + 0 && r.stages_seen == 4, "didn't run Clouds: %d stages, first %d", r.stages_seen, r.stage_temp[1]);
+}
+
+static void t_stop_early(void)
+{
+    int i;
+    printf("stopped before the dab point: not counted, slot restored\n");
+    reset_device(0);
+    tick();
+    start_session(1, 150, 65, 30);
+    for (i = 0; i < 200; i++) tick();
+    sim_stop();
+    run_to_end(5);
+    CHECK(u16at(sim_dab, 2) == 0, "counted a stopped ramp");
+    CHECK(u16at(sim_struct, TBL_CO_F * 2) == 150, "slot %d", u16at(sim_struct, TBL_CO_F * 2));
+}
+
+static void t_step(void)
+{
+    int i;
+    printf("+/- stage jumps\n");
+    reset_device(1);
+    tick();
+    start_session(1, 150, 65, 30);
+    for (i = 0; i < 5; i++) tick();
+    ramp_step(ST(), 1); ramp_step(ST(), 1); ramp_step(ST(), 1); ramp_step(ST(), 1);
+    CHECK(ST()->stage == 4, "stage %d", ST()->stage);
+    ramp_step(ST(), -1);
+    CHECK(ST()->stage == 3 && slot_f() == 485, "stage %d temp %d", ST()->stage, slot_f());
+    CHECK(!ST()->counted, "counted on a jump with no time at temperature");
+}
+
+static void t_announce(void)
+{
+    static const unsigned char aa[19] = { 0xaa, 19 };
+    int i;
+    printf("announcement after the 0xAA reply, through a busy queue\n");
+    reset_device(0);
+    tick();
+    ramp_marker_dispatch(RAMP_OFFSET_MARKER, (u8)(signed char)-5);
+    ramp_store_set(RAMP_SEL_OFFSET, 3);
+    notify_busy = 0;
+    CHECK(ramp_announce_entry(27, aa, 19) == 0, "0xAA send failed");
+    CHECK(last_len == 19 && last_pkt[0] == 0xaa, "0xAA not passed through unchanged");
+    notify_busy = 3000;                 /* the sync burst filling the queue */
+    for (i = 0; i < 3100; i++) tick();
+    CHECK(last_len == 12, "announcement not sent (len %d)", last_len);
+    CHECK(last_pkt[0] == 0xbc && last_pkt[1] == 12 && !memcmp(last_pkt + 2, "TRMP", 4) && last_pkt[11] == 0xbc, "framing");
+    CHECK(last_pkt[7] == DEV_ID && last_pkt[8] == 1 && last_pkt[9] == 3 && (signed char)last_pkt[10] == -5,
+          "fields dev %d en %d preset %d ofs %d", last_pkt[7], last_pkt[8], last_pkt[9], (signed char)last_pkt[10]);
+    i = notify_ok;
+    tick(); tick();
+    CHECK(notify_ok == i, "kept sending after success");
+}
+
+static void t_garbage_ram(void)
+{
+    printf("power-on RAM that happens to hold the magic\n");
+    reset_device(0);
+    memset(sim_state, 0, sizeof sim_state);
+    ((volatile ramp_state_t *)sim_state)->magic = RAMP_MAGIC;
+    ((volatile ramp_state_t *)sim_state)->stage = 3;
+    ((volatile ramp_state_t *)sim_state)->n_stages = 2;     /* inconsistent */
+    sim_struct[OFF_SESSION] = 1;
+    tick(); tick();
+    CHECK(ST()->stage == 0, "acted on an inconsistent state");
+    CHECK(u16at(sim_struct, TBL_CO_F * 2) == 0 && u16at(sim_struct, TBL_FL_F * 2) == 0, "wrote a slot from garbage");
+}
+
+int main(void)
+{
+    CHECK(sizeof(ramp_state_t) < sizeof sim_state, "state too big");
+    t_default_preset(0);
+    t_default_preset(1);
+    t_flower_no_default();
+    t_upload_precedence();
+    t_unusable_store();
+    t_offset();
+    t_picker();
+    t_stop_early();
+    t_step();
+    t_announce();
+    t_garbage_ram();
+    printf(fails ? "\n%d FAILED\n" : "\nALL HOST TESTS PASSED\n", fails);
+    return fails != 0;
+}

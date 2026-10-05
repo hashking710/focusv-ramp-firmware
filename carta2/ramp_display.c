@@ -465,13 +465,14 @@ void ramp_dcac_view(void)
 #define PICK_Y  98
 #define PICK_W  160
 #define PICK_H  36
-void ramp_picker_draw(u8 sel)
+void ramp_picker_draw(u8 sel, u8 enabled)
 {
     int i;
+    u16 lit = enabled ? C_INK : C_LOW;   /* orange when the ramp system is off */
     rect(PICK_X, PICK_Y, PICK_W, PICK_H, C_BLACK);
-    small(PICK_X + 14, PICK_Y + 10, sel + 1, C_INK);
+    small(PICK_X + 14, PICK_Y + 10, sel + 1, lit);
     for (i = 0; i < DEV_PICK_COUNT; i++)
-        rect(PICK_X + 40 + i * 18, PICK_Y + 14, 12, 8, i == sel ? C_INK : C_DOT_OFF);
+        rect(PICK_X + 40 + i * 18, PICK_Y + 14, 12, 8, i == sel ? lit : C_DOT_OFF);
 }
 
 void ramp_ce70_hide(void)
@@ -481,7 +482,7 @@ void ramp_ce70_hide(void)
         return;
     orig_ce70();
     if (st->picker_on && STRUCT_BASE[OFF_SCREEN] == 0)
-        ramp_picker_draw(st->picker_sel);
+        ramp_picker_draw(st->picker_sel, st->picker_enabled);
 }
 void ramp_cf58_hide(void) { if (!ramp_active(RAMP_STATE)) orig_cf58(); }
 void ramp_db40_hide(void) { if (!ramp_active(RAMP_STATE)) orig_db40(); }

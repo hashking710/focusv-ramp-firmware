@@ -76,37 +76,24 @@ The patch hooks the only call to the stock button-event consumer (0x5618):
 
 Outside a ramp, every event goes to the stock consumer unchanged.
 
-## Preset picker
+## Preset picker and on/off
 
-Hold − from the idle screen to open the picker. A box over the stock target line shows the
-selected preset's number and a row of six markers (the lit one is selected). + and − step through
-the six built-in presets, and a click leaves the picker and keeps the choice. The stock screen
-is redrawn from the stock idle screen on exit, so the stock target line comes back. The box is
-cleared to black while the picker is open, so the target line underneath is hidden until then.
+From the idle screen, with no session, **hold −** to open the picker. A box over the stock target
+line shows the selected preset's number and a row of six markers. Inside it:
 
-## On/off switch: hold + and − together
+- **+ / −**: next / previous built-in preset;
+- **double click**: switch the ramp system on or off -- with it off, the number and the selected
+  marker turn orange;
+- **click**: leave, saving the choice in flash. The stock idle screen is redrawn.
 
-Hold + and − down at the same time, any time (not only during a ramp), to toggle the whole ramp
-system on or off, directly on the device, no app needed -- the same feature Aeris and Sport get
-from a quadruple click of their single button:
+The box is redrawn on every change, from the event hook, and again whenever stock redraws the idle
+screen. The picker opens even when the system is off, so it can be switched back on; while off, no
+ramp arms and no stage or offset is saved. It closes, passing the event on, as soon as the screen
+leaves idle. A held − on the idle screen does nothing in stock (screen 0's handler only acts on a
+click), so it doesn't shadow a stock gesture.
 
-- **Off**: no new ramp can arm, and no new waypoint can be saved -- a stage-save packet is
-  dropped with no flash write at all, the same as on stock firmware. A ramp already running
-  finishes or stops normally; it isn't interrupted.
-- **On**: back to normal.
-
-It's stored as one more byte in the same flash sector as the waypoints, so it survives a power
-cycle, and is shared with the Aeris/Sport toggle's own flag layout. A device that's never had this
-toggled reads as **on** -- today's behaviour, unchanged.
-
-The Carta 2 has no single click-counter like Aeris/Sport's LED preset cycle, so this doesn't reuse
-that mechanism. It instead watches the same + / − press and held events the existing stage-stepping
-feature above already consumes: holding − sets one flag, holding + sets the other (either one's own
-short-press or held/auto-repeat event counts as "held"; any other event clears both), and the
-instant both are set, it toggles and clears them. The combo is only ever *read*, never consumed --
-real hardware testing confirmed holding + and − together (or all three buttons) does nothing
-visible on stock firmware, and this patch doesn't change that: whatever stock does, or doesn't do,
-with + or − individually is completely unaffected, during a ramp or not.
+The earlier on/off gesture, + and − held together, is gone: it counted any − press followed by any +
+press, so stepping through presets could switch the system off.
 
 ## Patch sites (33, all written and checked by `tools/build.py`)
 

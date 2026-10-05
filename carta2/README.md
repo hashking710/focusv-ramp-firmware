@@ -81,8 +81,8 @@ Outside a ramp, every event goes to the stock consumer unchanged.
 Hold − from the idle screen to open the picker. A box over the stock target line shows the
 selected preset's number and a row of six markers (the lit one is selected). + and − step through
 the six built-in presets, and a click leaves the picker and keeps the choice. The stock screen
-returns to its normal target line on exit. The box is cleared to black while the picker is open,
-so the target line underneath is hidden until then.
+is redrawn from the stock idle screen on exit, so the stock target line comes back. The box is
+cleared to black while the picker is open, so the target line underneath is hidden until then.
 
 ## On/off switch: hold + and − together
 

@@ -7,9 +7,10 @@
  * 8 = double click (stock: +10 s).
  *
  * While a ramp is active (everything else is stock):
- *   single click -> stop. Screen is forced to "heating" (1) so the stock
- *                   heating-screen handler (0x5708) performs the stop itself via
- *                   0x97f0, whatever screen was showing.
+ *   single click -> stop. Screen is forced to 5 (the live heating screen). Its
+ *                   stock handler at 0x5954 runs the stop routine 0x97f0 on
+ *                   event 7 and returns to idle. Screen 1, used before, is a
+ *                   plain return in the consumer's table: it never stopped.
  *   + / - short  -> next / previous stage
  *   + / - held   -> ignored (auto-repeat would skip every stage)
  *   double click -> ignored (stock +10 s would rewind the ramp clock)
@@ -28,10 +29,13 @@
 
 #define EVENT_MAILBOX        ((volatile u8 *)0x84319c)
 #define orig_event_consumer  STOCK_FN(void_fn, 0x5618)
-#define orig_ce70_restore    STOCK_FN(void_fn, 0xce70)
 
 #define HOLD_MINUS 1
 #define HOLD_PLUS  2
+#define SCREEN_HEATING 5
+
+typedef void (*draw_screen_fn)(unsigned int screen);
+#define stock_draw_screen STOCK_FN(draw_screen_fn, 0xf338)
 
 void ramp_event_entry(void)
 {
@@ -62,7 +66,7 @@ void ramp_event_entry(void)
             return;
         }
         if (ev == 7)
-            STRUCT_BASE[OFF_SCREEN] = 1;
+            STRUCT_BASE[OFF_SCREEN] = SCREEN_HEATING;
     }
 
     if (mb[1]) {
@@ -72,7 +76,7 @@ void ramp_event_entry(void)
                               DEV_PICK_ENTER, DEV_PICK_NEXT, DEV_PICK_PREV, DEV_PICK_EXIT)) {
             mb[1] = 0;
             if (was_on && !st->picker_on)
-                orig_ce70_restore();
+                stock_draw_screen(0);
             return;
         }
     }

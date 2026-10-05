@@ -54,7 +54,7 @@ WAYPOINT_SECTOR = 0x32000
 IMAGE_END_ADDR = 0x33000
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_carta2_v1.bin"   # built locally, never published
-BLOB_SHA256 = "7765aeb0f0a3159f9ff0b309c095a7f4c1414ffedd0c33c22b350cba6b7931e8"   # written by tools/build.py
+BLOB_SHA256 = "77034e94a7900b51743283165b91af075cc566492e6c4af6c050268bb5273943"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock

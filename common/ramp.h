@@ -188,6 +188,8 @@ typedef struct {
     u8  picker_on;    /* preset select mode (ramp_picker.c) is showing */
     u8  picker_sel;   /* the preset being shown while picker_on */
     u8  picker_dirty; /* picker_sel changed and not yet written to flash */
+    u8  btn_active;   /* the control button's light is ours (button_set) */
+    u8  btn_saved[3]; /* its stock colour, restored by button_release */
     u8  hold_flags;   /* Carta 2 only: +/- held-together toggle (ramp_input.c) */
     u8  frame_drawn;  /* display bookkeeping (Carta 2 screen) */
     u8  drawn_fill;
@@ -234,6 +236,42 @@ static inline u16 stage_target_display(volatile ramp_state_t *st)
 
 void ramp_step(volatile ramp_state_t *st, int dir);
 void ramp_picker_draw(u8 sel);   /* Carta 2 only */
+
+/* Colour of the preset picker's selection, on the LEDs and the button light. */
+#define RAMP_PICK_R  60
+#define RAMP_PICK_G  140
+#define RAMP_PICK_B  255
+
+/* The control button's light, on the devices that have one (Aeris, Sport).
+ * The stock button routines read these three bytes and drive the light from
+ * them, so writing them shows the colour; the stock colour is saved on the
+ * first write and put back when the ramp or picker stops using the light. */
+#ifdef DEV_BTN_RGB
+static inline void button_set(volatile ramp_state_t *st, u8 r, u8 g, u8 b)
+{
+    volatile u8 *c = (volatile u8 *)DEV_BTN_RGB;
+    if (!st->btn_active) {
+        st->btn_saved[0] = c[0];
+        st->btn_saved[1] = c[1];
+        st->btn_saved[2] = c[2];
+        st->btn_active = 1;
+    }
+    c[0] = r;
+    c[1] = g;
+    c[2] = b;
+}
+
+static inline void button_release(volatile ramp_state_t *st)
+{
+    volatile u8 *c = (volatile u8 *)DEV_BTN_RGB;
+    if (!st->btn_active)
+        return;
+    c[0] = st->btn_saved[0];
+    c[1] = st->btn_saved[1];
+    c[2] = st->btn_saved[2];
+    st->btn_active = 0;
+}
+#endif
 void ramp_toggle_enabled(void);
 u8   ramp_default_stages(volatile ramp_state_t *st, u8 sel);
 u8   ramp_picker_event(volatile ramp_state_t *st, int ev, u8 idle,

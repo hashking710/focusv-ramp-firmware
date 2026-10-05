@@ -31,9 +31,9 @@ static void show_selection(u8 sel)
     int i;
     for (i = 0; i < LED_COUNT; i++) {
         u8 on = i <= sel;
-        LED_RGB[i * 3 + 0] = on ? 60 : 0;
-        LED_RGB[i * 3 + 1] = on ? 140 : 0;
-        LED_RGB[i * 3 + 2] = on ? 255 : 0;
+        LED_RGB[i * 3 + 0] = on ? RAMP_PICK_R : 0;
+        LED_RGB[i * 3 + 1] = on ? RAMP_PICK_G : 0;
+        LED_RGB[i * 3 + 2] = on ? RAMP_PICK_B : 0;
     }
     led_push();
 }
@@ -44,11 +44,13 @@ void ramp_led_update(void)
     int lo = 0x7fff, hi = 0, f, frac, x, seg, t, lit, i;
     u8 r, g, b;
 
-    if (LED_ENABLED == 0)
+    if (LED_ENABLED == 0 || !(ramp_active(st) || st->picker_on)) {
+        button_release(st);
         return;
+    }
     if (!ramp_active(st)) {
-        if (st->picker_on)
-            show_selection(st->picker_sel);
+        show_selection(st->picker_sel);
+        button_set(st, RAMP_PICK_R, RAMP_PICK_G, RAMP_PICK_B);
         return;
     }
 
@@ -76,4 +78,5 @@ void ramp_led_update(void)
         LED_RGB[i * 3 + 2] = on ? b : 0;
     }
     led_push();
+    button_set(st, r, g, b);
 }

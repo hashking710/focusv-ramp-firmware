@@ -83,6 +83,9 @@
 #define DEV_PICK_PREV       (-1)
 #define DEV_PICK_EXIT       15
 
+/* The control button's light: stock colour bytes, read by the state dispatcher 0x8ff8 */
+#define DEV_BTN_RGB         0x844b45
+
 void ramp_led_update(void);
 #define DEV_AFTER_TICK(st)  ramp_led_update()
 

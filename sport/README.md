@@ -56,6 +56,18 @@ A hold from idle, with no picker open, would otherwise increment the shared gest
 `+0x60` (the counter the click gestures use), so the hook takes it. The picker only opens with no session
 running and with the ramp system on.
 
+## Button light
+
+The control button has its own light. During a ramp it shows the same temperature colour as the LEDs
+(blue at the coolest stage, through violet, magenta and orange, to gold at the hottest). While the
+preset picker is open it shows the selected preset's colour, the same blue as the LED selection. The
+light follows the LED setting: with LEDs off it shows nothing and the stock colour is left alone.
+
+The patch writes the light's three colour bytes each tick, after the stock tick has run, and the
+stock button routine drives the light from them. The stock colour is saved the first time the patch
+takes the light and put back when the ramp or picker stops using it. This relies on the stock button
+routine running on each tick, which has been traced in the code but not confirmed on hardware.
+
 ## On/off switch: four clicks
 
 Click the button four times in a row (the same gesture that otherwise cycles through the

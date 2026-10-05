@@ -1,7 +1,7 @@
     /* ramp_marker_entry: installed at 0x11d96 in place of the two stock instructions
      * that load the 0xCC packet's marker byte ("tmovs r3,#0x28 / tloadrb r3,[r5,r3]"),
      * just before the stock A5/AF/66 compare chain. Calls
-     * ramp_marker_dispatch(marker), then returns with r3 = marker, exactly as
+     * ramp_marker_dispatch(marker, byte 14 of the packet), then returns with r3 = marker, exactly as
      * those two instructions would.
      *
      * Register contract: the replaced instructions modify only r3, so r0-r2
@@ -20,6 +20,8 @@ ramp_marker_entry:
     tmovs r3, #0x28
     tloadrb r3, [r5, r3]
     tmov r0, r3
+    tmovs r1, #0x29
+    tloadrb r1, [r5, r1]
     tjl ramp_marker_dispatch
     tmovs r3, #0x28
     tloadrb r3, [r5, r3]

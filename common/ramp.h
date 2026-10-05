@@ -138,6 +138,9 @@ static inline u8 ramp_enabled(void)
 #define RAMP_DEFAULT_PRESET  2
 #define RAMP_OFS_MIN_F       (-10)
 #define RAMP_OFS_MAX_F       15
+/* Sent as a SET_TEMP marker with the offset in packet byte 14 (unread by stock
+ * firmware; see ramp_marker_entry.s). Byte 14 is zero in every other packet. */
+#define RAMP_OFFSET_MARKER   0xbb
 u8  ramp_selected(void);
 int ramp_offset(void);
 void ramp_store_set(u8 off, u8 v);

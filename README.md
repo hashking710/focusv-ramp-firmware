@@ -33,8 +33,9 @@ by, or sponsored by Focus V.
 - **Starting a ramp** is an ordinary session started at a sentinel temperature (150 °F). If
   usable stages are saved for the attached atomizer's mode, the device runs them. Otherwise, in
   concentrate mode, it runs the selected built-in preset, and in flower mode it's a normal stock
-  session at that temperature. A setup offset (−10 to +15 °F, from the app) shifts the built-in
-  presets; the device defaults to no offset.
+  session at that temperature. A setup offset (−10 to +15 °F, set from the app) shifts the
+  built-in presets; it defaults to zero. It's sent as marker 0xBB with the offset in packet byte 14,
+  which the stock packet handler never reads.
 - **Stages reuse the stock heater.** Each stage changes the active preset's temperature exactly
   the way the stock firmware changes temperature mid-session. The stock heat-up, ready cue, PID
   control and safety limits run every stage unchanged; the patch never drives the heater itself.

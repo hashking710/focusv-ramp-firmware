@@ -56,12 +56,19 @@ static void save_waypoint(u8 bank, u8 slot, u16 f, u16 c, u16 hold)
     flash_write(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, buf);
 }
 
-void ramp_marker_dispatch(u8 marker)
+void ramp_marker_dispatch(u8 marker, u8 byte14)
 {
     if (ramp_active(RAMP_STATE))
         return;   /* never rewrite the store under a running ramp */
     if (!ramp_enabled())
         return;   /* disabled: no flash write of any kind, full stop */
+
+    if (marker == RAMP_OFFSET_MARKER) {
+        int v = (signed char)byte14;
+        if (v >= RAMP_OFS_MIN_F && v <= RAMP_OFS_MAX_F)
+            ramp_store_set(RAMP_OFS_OFFSET, byte14);
+        return;
+    }
 
     if (marker >= 0xb1 && marker <= 0xb5)
         save_waypoint(0, marker - 0xb1, *PRESET(TBL_FL_F, 0), *PRESET(TBL_FL_C, 0),

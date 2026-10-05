@@ -233,6 +233,7 @@ static inline u16 stage_target_display(volatile ramp_state_t *st)
 }
 
 void ramp_step(volatile ramp_state_t *st, int dir);
+void ramp_picker_draw(u8 sel);   /* Carta 2 only */
 void ramp_toggle_enabled(void);
 u8   ramp_default_stages(volatile ramp_state_t *st, u8 sel);
 u8   ramp_picker_event(volatile ramp_state_t *st, int ev, u8 idle,

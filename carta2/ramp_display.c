@@ -457,7 +457,32 @@ void ramp_dcac_view(void)
     if (!ramp_active(st)) { orig_dcac(); return; }
     ramp_draw(st);
 }
-void ramp_ce70_hide(void) { if (!ramp_active(RAMP_STATE)) orig_ce70(); }
+/* Preset picker overlay (ramp_input.c): a black box over the stock target
+ * line, showing the chosen preset's number and a row of six markers. Drawn from
+ * the 0xce70 hook, which the idle screen calls every frame, so it's repainted
+ * each frame while the picker is open. */
+#define PICK_X  40
+#define PICK_Y  98
+#define PICK_W  160
+#define PICK_H  36
+void ramp_picker_draw(u8 sel)
+{
+    int i;
+    rect(PICK_X, PICK_Y, PICK_W, PICK_H, C_BLACK);
+    small(PICK_X + 14, PICK_Y + 10, sel + 1, C_INK);
+    for (i = 0; i < DEV_PICK_COUNT; i++)
+        rect(PICK_X + 40 + i * 18, PICK_Y + 14, 12, 8, i == sel ? C_INK : C_DOT_OFF);
+}
+
+void ramp_ce70_hide(void)
+{
+    volatile ramp_state_t *st = RAMP_STATE;
+    if (ramp_active(st))
+        return;
+    orig_ce70();
+    if (st->picker_on && STRUCT_BASE[OFF_SCREEN] == 0)
+        ramp_picker_draw(st->picker_sel);
+}
 void ramp_cf58_hide(void) { if (!ramp_active(RAMP_STATE)) orig_cf58(); }
 void ramp_db40_hide(void) { if (!ramp_active(RAMP_STATE)) orig_db40(); }
 void ramp_d048_hide(void) { if (!ramp_active(RAMP_STATE)) orig_d048(); }

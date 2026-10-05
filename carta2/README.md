@@ -76,6 +76,14 @@ The patch hooks the only call to the stock button-event consumer (0x5618):
 
 Outside a ramp, every event goes to the stock consumer unchanged.
 
+## Preset picker
+
+Hold − from the idle screen to open the picker. A box over the stock target line shows the
+selected preset's number and a row of six markers (the lit one is selected). + and − step through
+the six built-in presets, and a click leaves the picker and keeps the choice. The stock screen
+returns to its normal target line on exit. The box is cleared to black while the picker is open,
+so the target line underneath is hidden until then.
+
 ## On/off switch: hold + and − together
 
 Hold + and − down at the same time, any time (not only during a ramp), to toggle the whole ramp

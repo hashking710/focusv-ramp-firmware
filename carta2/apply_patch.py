@@ -54,45 +54,45 @@ WAYPOINT_SECTOR = 0x32000
 IMAGE_END_ADDR = 0x33000
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_carta2_v1.bin"   # built locally, never published
-BLOB_SHA256 = "d82b7d6ebb04caf7a06696399522145141536f4a071a7c274d8250a3568036a1"   # written by tools/build.py
+BLOB_SHA256 = "7765aeb0f0a3159f9ff0b309c095a7f4c1414ffedd0c33c22b350cba6b7931e8"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock
 # instruction; each replacement is the real assembler's `tjl` to the named
 # function in the blob above.
 PATCHES = [
-    (0x6D0C, bytes.fromhex("fe97849c"), bytes.fromhex("2a900a9c")),  # tjl 0x5618 -> ramp_event_entry
+    (0x6D0C, bytes.fromhex("fe97849c"), bytes.fromhex("2a90429c")),  # tjl 0x5618 -> ramp_event_entry
     (0x6E2E, bytes.fromhex("04907d98"), bytes.fromhex("29907099")),  # tjl 0xaf2c -> ramp_trampoline
-    (0xE706, bytes.fromhex("fe97b39b"), bytes.fromhex("2290b59e")),  # tjl 0xce70 -> ramp_ce70_hide
-    (0xE70A, bytes.fromhex("fe97259c"), bytes.fromhex("2290bf9e")),  # tjl 0xcf58 -> ramp_cf58_hide
-    (0xE9B0, bytes.fromhex("fe975e9a"), bytes.fromhex("2290609d")),  # tjl 0xce70 -> ramp_ce70_hide
-    (0xE9B6, bytes.fromhex("fe97cf9a"), bytes.fromhex("2290699d")),  # tjl 0xcf58 -> ramp_cf58_hide
-    (0xEB42, bytes.fromhex("fe979599"), bytes.fromhex("2290979c")),  # tjl 0xce70 -> ramp_ce70_hide
-    (0xEB46, bytes.fromhex("fe97079a"), bytes.fromhex("2290a19c")),  # tjl 0xcf58 -> ramp_cf58_hide
-    (0xF36C, bytes.fromhex("fd97809d"), bytes.fromhex("22908298")),  # tjl 0xce70 -> ramp_ce70_hide
-    (0xF370, bytes.fromhex("fd97f29d"), bytes.fromhex("22908c98")),  # tjl 0xcf58 -> ramp_cf58_hide
+    (0xE706, bytes.fromhex("fe97b39b"), bytes.fromhex("2290df9e")),  # tjl 0xce70 -> ramp_ce70_hide
+    (0xE70A, bytes.fromhex("fe97259c"), bytes.fromhex("2290f79e")),  # tjl 0xcf58 -> ramp_cf58_hide
+    (0xE9B0, bytes.fromhex("fe975e9a"), bytes.fromhex("22908a9d")),  # tjl 0xce70 -> ramp_ce70_hide
+    (0xE9B6, bytes.fromhex("fe97cf9a"), bytes.fromhex("2290a19d")),  # tjl 0xcf58 -> ramp_cf58_hide
+    (0xEB42, bytes.fromhex("fe979599"), bytes.fromhex("2290c19c")),  # tjl 0xce70 -> ramp_ce70_hide
+    (0xEB46, bytes.fromhex("fe97079a"), bytes.fromhex("2290d99c")),  # tjl 0xcf58 -> ramp_cf58_hide
+    (0xF36C, bytes.fromhex("fd97809d"), bytes.fromhex("2290ac98")),  # tjl 0xce70 -> ramp_ce70_hide
+    (0xF370, bytes.fromhex("fd97f29d"), bytes.fromhex("2290c498")),  # tjl 0xcf58 -> ramp_cf58_hide
     (0xF39C, bytes.fromhex("fe97869c"), bytes.fromhex("22905c98")),  # tjl 0xdcac -> ramp_dcac_view
-    (0xF4A8, bytes.fromhex("fe974a9b"), bytes.fromhex("2190fc9f")),  # tjl 0xdb40 -> ramp_db40_hide
-    (0xF4AC, bytes.fromhex("fd97e09c"), bytes.fromhex("2190e29f")),  # tjl 0xce70 -> ramp_ce70_hide
-    (0xF4B0, bytes.fromhex("fd97529d"), bytes.fromhex("2190ec9f")),  # tjl 0xcf58 -> ramp_cf58_hide
-    (0xF540, bytes.fromhex("fe97b89e"), bytes.fromhex("2190e09f")),  # tjl 0xe2b4 -> ramp_e2b4_hide
+    (0xF4A8, bytes.fromhex("fe974a9b"), bytes.fromhex("22903498")),  # tjl 0xdb40 -> ramp_db40_hide
+    (0xF4AC, bytes.fromhex("fd97e09c"), bytes.fromhex("22900c98")),  # tjl 0xce70 -> ramp_ce70_hide
+    (0xF4B0, bytes.fromhex("fd97529d"), bytes.fromhex("22902498")),  # tjl 0xcf58 -> ramp_cf58_hide
+    (0xF540, bytes.fromhex("fe97b89e"), bytes.fromhex("22901898")),  # tjl 0xe2b4 -> ramp_e2b4_hide
     (0xF546, bytes.fromhex("fd973b9f"), bytes.fromhex("21906d9f")),  # tjl 0xd3c0 -> ramp_d3c0_view
-    (0xF54C, bytes.fromhex("fe97f89a"), bytes.fromhex("2190aa9f")),  # tjl 0xdb40 -> ramp_db40_hide
-    (0xF552, bytes.fromhex("fe97d59e"), bytes.fromhex("2190cb9f")),  # tjl 0xe300 -> ramp_e300_hide
-    (0xF558, bytes.fromhex("fd978a9c"), bytes.fromhex("21908c9f")),  # tjl 0xce70 -> ramp_ce70_hide
-    (0xF55C, bytes.fromhex("fd97fc9c"), bytes.fromhex("2190969f")),  # tjl 0xcf58 -> ramp_cf58_hide
-    (0xF562, bytes.fromhex("fd97719d"), bytes.fromhex("2190ab9f")),  # tjl 0xd048 -> ramp_d048_hide
-    (0xF7D8, bytes.fromhex("fe97289e"), bytes.fromhex("21907c9e")),  # tjl 0xe42c -> ramp_e42c_hide
-    (0xFA30, bytes.fromhex("fd971e9a"), bytes.fromhex("2190209d")),  # tjl 0xce70 -> ramp_ce70_hide
-    (0xFA34, bytes.fromhex("fd97909a"), bytes.fromhex("21902a9d")),  # tjl 0xcf58 -> ramp_cf58_hide
+    (0xF54C, bytes.fromhex("fe97f89a"), bytes.fromhex("2190e29f")),  # tjl 0xdb40 -> ramp_db40_hide
+    (0xF552, bytes.fromhex("fe97d59e"), bytes.fromhex("22900398")),  # tjl 0xe300 -> ramp_e300_hide
+    (0xF558, bytes.fromhex("fd978a9c"), bytes.fromhex("2190b69f")),  # tjl 0xce70 -> ramp_ce70_hide
+    (0xF55C, bytes.fromhex("fd97fc9c"), bytes.fromhex("2190ce9f")),  # tjl 0xcf58 -> ramp_cf58_hide
+    (0xF562, bytes.fromhex("fd97719d"), bytes.fromhex("2190e39f")),  # tjl 0xd048 -> ramp_d048_hide
+    (0xF7D8, bytes.fromhex("fe97289e"), bytes.fromhex("2190b49e")),  # tjl 0xe42c -> ramp_e42c_hide
+    (0xFA30, bytes.fromhex("fd971e9a"), bytes.fromhex("21904a9d")),  # tjl 0xce70 -> ramp_ce70_hide
+    (0xFA34, bytes.fromhex("fd97909a"), bytes.fromhex("2190629d")),  # tjl 0xcf58 -> ramp_cf58_hide
     (0xFA38, bytes.fromhex("fd97c29c"), bytes.fromhex("2190e09c")),  # tjl 0xd3c0 -> ramp_d3c0_full
     (0xFA3C, bytes.fromhex("fe973699"), bytes.fromhex("2190009d")),  # tjl 0xdcac -> ramp_dcac_full
-    (0xFA40, bytes.fromhex("fe977e98"), bytes.fromhex("2190309d")),  # tjl 0xdb40 -> ramp_db40_hide
-    (0xFA50, bytes.fromhex("fd97fa9a"), bytes.fromhex("2190349d")),  # tjl 0xd048 -> ramp_d048_hide
-    (0xFA54, bytes.fromhex("fe97ea9c"), bytes.fromhex("21903e9d")),  # tjl 0xe42c -> ramp_e42c_hide
-    (0xFA58, bytes.fromhex("fe97529c"), bytes.fromhex("2190489d")),  # tjl 0xe300 -> ramp_e300_hide
-    (0xFA60, bytes.fromhex("fe97289c"), bytes.fromhex("2190509d")),  # tjl 0xe2b4 -> ramp_e2b4_hide
-    (0x11D96, bytes.fromhex("28a3eb1c"), bytes.fromhex("1f905b9c")),  # tmovs r3, #40 -> ramp_marker_entry
+    (0xFA40, bytes.fromhex("fe977e98"), bytes.fromhex("2190689d")),  # tjl 0xdb40 -> ramp_db40_hide
+    (0xFA50, bytes.fromhex("fd97fa9a"), bytes.fromhex("21906c9d")),  # tjl 0xd048 -> ramp_d048_hide
+    (0xFA54, bytes.fromhex("fe97ea9c"), bytes.fromhex("2190769d")),  # tjl 0xe42c -> ramp_e42c_hide
+    (0xFA58, bytes.fromhex("fe97529c"), bytes.fromhex("2190809d")),  # tjl 0xe300 -> ramp_e300_hide
+    (0xFA60, bytes.fromhex("fe97289c"), bytes.fromhex("2190889d")),  # tjl 0xe2b4 -> ramp_e2b4_hide
+    (0x11D96, bytes.fromhex("28a3eb1c"), bytes.fromhex("1f90a19c")),  # tmovs r3, #40 -> ramp_marker_entry
 ]
 
 

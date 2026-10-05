@@ -28,6 +28,7 @@
 
 #define EVENT_MAILBOX        ((volatile u8 *)0x84319c)
 #define orig_event_consumer  STOCK_FN(void_fn, 0x5618)
+#define orig_ce70_restore    STOCK_FN(void_fn, 0xce70)
 
 #define HOLD_MINUS 1
 #define HOLD_PLUS  2
@@ -66,9 +67,12 @@ void ramp_event_entry(void)
 
     if (mb[1]) {
         u8 idle = STRUCT_BASE[OFF_SCREEN] == 0 && STRUCT_BASE[OFF_SESSION] == 0;
+        u8 was_on = st->picker_on;
         if (ramp_picker_event(st, mb[0], idle,
                               DEV_PICK_ENTER, DEV_PICK_NEXT, DEV_PICK_PREV, DEV_PICK_EXIT)) {
             mb[1] = 0;
+            if (was_on && !st->picker_on)
+                orig_ce70_restore();
             return;
         }
     }

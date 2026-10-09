@@ -114,6 +114,18 @@ def scale(im, out_h):
     return rgb
 
 
+def baseline_row(word):
+    """The row most letters end on: the commonest lowest-ink row over the
+    columns (the p's descender is the exception)."""
+    px = word.load()
+    bottoms = {}
+    for x in range(word.width):
+        ys = [y for y in range(word.height) if max(px[x, y]) >= 96]
+        if ys:
+            bottoms[ys[-1]] = bottoms.get(ys[-1], 0) + 1
+    return max(bottoms, key=bottoms.get)
+
+
 def quantise(img):
     """RGB565 with Floyd-Steinberg error diffusion; pure black stays 0."""
     w, h = img.size
@@ -156,7 +168,9 @@ def main():
     strip_w = mark.width + GAP + word.width
     strip = Image.new("RGB", (strip_w, STRIP_H))
     strip.paste(mark, (0, (STRIP_H - MARK_H) // 2))
-    strip.paste(word, (mark.width + GAP, (STRIP_H - WORD_H) // 2))
+    word_top = STRIP_H - WORD_H              # the descender ends on the strip's last row
+    strip.paste(word, (mark.width + GAP, word_top))
+    baseline = word_top + baseline_row(word)   # the dab count sits on this row too
     pix = quantise(strip)
 
     # "DABS" label for the dab counter, a hand-drawn 5 x 7 pixel font so it
@@ -196,6 +210,7 @@ def main():
         f"#define LOGO_PW     {strip_w}   /* image width, px */",
         f"#define LOGO_H      {STRIP_H}",
         f"#define LOGO_W      {LEFT + strip_w}   /* the logo ends here; the dab count is right of it */",
+        f"#define LOGO_BASELINE {baseline}   /* strip row the wordmark's letters stand on */",
         f"static const u8 LOGO_PIX[{strip_w * STRIP_H * 2}] = {{",
     ]
     flat = [v for row in pix for v in row]

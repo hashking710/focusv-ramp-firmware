@@ -98,7 +98,7 @@ typedef u16 (*u16_fn)(void);
 #define C_DOT_OFF 0x18E3  /* unlit meter circle, rgb(24,28,24) */
 
 #define ROW_A    20
-#define ROW_B    44
+#define ROW_B    42
 #define SCREEN_Y1 225                       /* last row the ramp screen owns */
 
 /* Below the header the ramp screen owns y 70-225: the original chart box plus
@@ -394,8 +394,11 @@ static void update_trace(volatile ramp_state_t *st, scale_t *s)
 
 /* ---- the dab counter --------------------------------------------------------- */
 
-#define DAB_Y    (LOGO_Y + 3)               /* small digits, y 205-221 */
-#define LABEL_Y  (DAB_Y + 10)               /* "DABS" bottom = the digits' bottom row, y 221 */
+/* The count and "DABS" stand on the wordmark's baseline (the digits' ink
+ * ends on glyph row 16, the label's on its row 6). */
+#define DAB_Y    (LOGO_Y + LOGO_BASELINE - 16)
+#define LABEL_Y  (LOGO_Y + LOGO_BASELINE - 6)
+#define DAB_R    233                        /* right edge, as the units and the meter */
 
 static void draw_dabs(volatile ramp_state_t *st, u8 force)
 {
@@ -410,11 +413,11 @@ static void draw_dabs(volatile ramp_state_t *st, u8 force)
         digit[n++] = rest - q * 10;
         rest = q;
     } while (rest && n < 5);
-    rect(LOGO_W + 4, LOGO_Y, 234 - (LOGO_W + 4), LOGO_H, C_BLACK);
-    x = 234 - n * 12;                       /* last digit ends at x 232 */
+    rect(LOGO_W + 4, LOGO_Y, DAB_R - (LOGO_W + 4), LOGO_H, C_BLACK);
+    x = DAB_R + 3 - n * 12;                 /* 10 px cells, 2 apart: the last ends at DAB_R */
     for (i = n - 1; i >= 0; i--, x += 12)
         small(x, DAB_Y, digit[i], C_INK);
-    x = 234 - n * 12 - 6 - LABEL_W;
+    x = DAB_R + 3 - n * 12 - 6 - LABEL_W;
     for (i = 0; i < LABEL_RUNS; i++)
         rect(x + LABEL_RUN[i][0], LABEL_Y + LABEL_RUN[i][2], LABEL_RUN[i][1], 1, C_TIME);
     st->drawn_dabs = v;

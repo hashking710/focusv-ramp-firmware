@@ -125,6 +125,10 @@ void ramp_marker_dispatch(u8 marker, u8 byte14)
             ramp_store_set(RAMP_MODE_OFFSET, byte14 == RAMP_MODE_STOCK ? RAMP_MODE_STOCK : 0xff);
             if (st->magic == RAMP_MAGIC) {
                 st->stock_mode = ramp_store_stock_mode();   /* what flash now holds */
+                /* A session already running belongs to stock until it ends:
+                 * it never turns into a ramp halfway (cleared at its end). */
+                if (STRUCT_BASE[OFF_SESSION] != 0)
+                    st->arm_failed = 1;
                 ramp_announce_queue(st);                    /* tell the app at once */
             }
         }

@@ -534,6 +534,17 @@ static void t_stock_mode(void)
     r = run_to_end(300);
     CHECK(r.stages_seen == 1 && r.stage_temp[1] == 430, "the saved ramp didn't survive stock mode: %d stages", r.stages_seen);
 
+    printf("switching back to ramp mode mid-session leaves that session stock\n");
+    ramp_marker_dispatch(RAMP_MODE_MARKER, RAMP_MODE_STOCK);
+    start_session(1, 150, 65, 5);
+    tick();
+    ramp_marker_dispatch(RAMP_MODE_MARKER, RAMP_MODE_RAMP);
+    r = run_to_end(200);
+    CHECK(r.stages_seen == 0, "armed halfway through a stock session (%d stages)", r.stages_seen);
+    start_session(1, 150, 65, 30);
+    r = run_to_end(300);
+    CHECK(r.stages_seen == 1, "the next session didn't arm: %d stages", r.stages_seen);
+
     printf("the mode switch is refused while a ramp runs\n");
     start_session(1, 150, 65, 30);
     tick();

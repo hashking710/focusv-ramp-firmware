@@ -34,10 +34,14 @@ by, or sponsored by Focus V.
   During a ramp the button light shows the temperature colour. The choice and the on/off state are
   kept in flash. Outside the picker, every stock gesture behaves as before. The Carta 2 has no
   picker: every button gesture on its idle screen already has a stock meaning.
-- **Starting a ramp** is an ordinary session started at a sentinel temperature (150 °F). If
-  usable stages are saved for the attached atomizer's mode, the device runs them. Otherwise, in
-  concentrate mode, it runs the selected built-in preset, and in flower mode it's a normal stock
-  session at that temperature. A setup offset (−10 to +15 °F, set from the app) shifts the
+- **Starting a ramp.** From Terpline: the stock session start (marker 0xA5) with every current
+  value echoed, so nothing is rewritten, and a ramp request (0x52) in packet byte 14, which stock
+  never reads. The ramp runs on whatever preset is active, and that preset is put back exactly
+  afterwards. A request older than 3 s is ignored. From the device: a session on a preset slot
+  set to the sentinel temperature (150 °F). Either way, if usable stages are saved for the
+  attached atomizer's mode, the device runs them; otherwise, in concentrate mode, it runs the
+  selected built-in preset. With nothing to run, an app request stops the session, and a
+  sentinel slot is a normal stock session at that temperature. A setup offset (−10 to +15 °F, set from the app) shifts the
   built-in presets; it defaults to zero. It's sent as marker 0xBB with the offset in packet byte 14,
   which the stock packet handler never reads.
 - **Stages reuse the stock heater.** Each stage changes the active preset's temperature exactly

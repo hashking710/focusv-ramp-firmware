@@ -89,6 +89,14 @@ void ramp_marker_dispatch(u8 marker, u8 byte14)
     if (!ramp_enabled())
         return;   /* disabled: no flash write of any kind, full stop */
 
+    if (marker == RAMP_START_MARKER) {
+        if (byte14 == RAMP_START_REQUEST) {   /* see ramp.h: no flash involved */
+            RAMP_STATE->start_req = 1;
+            RAMP_STATE->start_req_t0 = DEV_SYS_TICK;
+        }
+        return;
+    }
+
     if (marker == RAMP_OFFSET_MARKER) {
         int v = (signed char)byte14;
         if (v >= RAMP_OFS_MIN_F && v <= RAMP_OFS_MAX_F)

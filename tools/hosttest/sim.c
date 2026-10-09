@@ -417,6 +417,76 @@ static void t_save_held(void)
     CHECK(saves > 0 && last_saved_f == 150, "held save not re-armed (saves %d, slot %d)", saves, last_saved_f);
 }
 
+/* a session on preset slot `rank` as it is (no slot writes), the way stock
+ * starts one after an app start marker */
+static void start_on_rank(int is_conc, int rank, int f, int c, int hold)
+{
+    int b = is_conc ? TBL_CO_F : TBL_FL_F, bc = is_conc ? TBL_CO_C : TBL_FL_C, bh = is_conc ? TBL_CO_HOLD : TBL_FL_HOLD;
+    sim_struct[0x06] = is_conc ? 2 : 1;
+    sim_struct[is_conc ? 0x08 : 0x07] = (unsigned char)rank;
+    set16(sim_struct, (rank + b) * 2, f);
+    set16(sim_struct, (rank + bc) * 2, c);
+    set16(sim_struct, (rank + bh) * 2, hold);
+    set16(sim_struct, OFF_COUNTDOWN, hold);
+    set16(sim_struct, OFF_MEAS_F, 77);
+    sim_struct[OFF_REACHED] = 0;
+    sim_struct[OFF_SESSION] = 1;
+}
+
+static void t_app_request(void)
+{
+    struct run r;
+    int i;
+    printf("app-requested ramp on a real preset: runs, then the slot and the custom preset are as they were\n");
+    reset_device(0);
+    tick();
+    set16(sim_struct, (0 + TBL_CO_F) * 2, 400);   /* the user's custom preset */
+    set16(sim_struct, (0 + TBL_CO_C) * 2, 204);
+    ramp_marker_dispatch(RAMP_START_MARKER, RAMP_START_REQUEST);
+    start_on_rank(1, 2, 480, 248, 40);
+    r = run_to_end(400);
+    CHECK(r.stages_seen == 4 && r.stage_temp[1] == 455, "stages %d first %d", r.stages_seen, r.stage_temp[1]);
+    CHECK(u16at(sim_struct, (2 + TBL_CO_F) * 2) == 480 && u16at(sim_struct, (2 + TBL_CO_C) * 2) == 248,
+          "slot 2 left at %d / %d", u16at(sim_struct, (2 + TBL_CO_F) * 2), u16at(sim_struct, (2 + TBL_CO_C) * 2));
+    CHECK(u16at(sim_struct, TBL_CO_F * 2) == 400 && u16at(sim_struct, TBL_CO_C * 2) == 204, "custom preset changed");
+
+    printf("app-requested ramp on a slot whose F and C disagree (stock's C table write): still put back\n");
+    reset_device(0);
+    tick();
+    ramp_marker_dispatch(RAMP_START_MARKER, RAMP_START_REQUEST);
+    start_on_rank(1, 3, (9 * 249 + 288) / 5, 249, 40);
+    r = run_to_end(400);
+    CHECK(r.stages_seen == 4, "stages %d", r.stages_seen);
+    CHECK(u16at(sim_struct, (3 + TBL_CO_F) * 2) == (9 * 249 + 288) / 5 && u16at(sim_struct, (3 + TBL_CO_C) * 2) == 249,
+          "slot 3 left at %d / %d", u16at(sim_struct, (3 + TBL_CO_F) * 2), u16at(sim_struct, (3 + TBL_CO_C) * 2));
+
+    printf("app-requested ramp with nothing to run (flower, no stages): the session is stopped\n");
+    reset_device(0);
+    tick();
+    ramp_marker_dispatch(RAMP_START_MARKER, RAMP_START_REQUEST);
+    start_on_rank(0, 1, 380, 193, 120);
+    for (i = 0; i < 3; i++) tick();
+    CHECK(sim_struct[OFF_SESSION] == 0, "session still running");
+    CHECK(u16at(sim_struct, (1 + TBL_FL_F) * 2) == 380, "slot changed");
+
+    printf("a stale request (over 3 s old) doesn't turn a later session into a ramp\n");
+    reset_device(0);
+    tick();
+    ramp_marker_dispatch(RAMP_START_MARKER, RAMP_START_REQUEST);
+    for (i = 0; i < 4 * TPS; i++) tick();
+    start_on_rank(1, 2, 480, 248, 40);
+    for (i = 0; i < 5; i++) tick();
+    CHECK(ST()->stage == 0 && sim_struct[OFF_SESSION] == 1, "stage %d session %d", ST()->stage, sim_struct[OFF_SESSION]);
+
+    printf("a start marker without the request code: a plain stock session\n");
+    reset_device(0);
+    tick();
+    ramp_marker_dispatch(RAMP_START_MARKER, 0);
+    start_on_rank(1, 2, 480, 248, 40);
+    for (i = 0; i < 5; i++) tick();
+    CHECK(ST()->stage == 0, "armed without a request");
+}
+
 static void t_picker_timeout(void)
 {
     volatile ramp_state_t *st;
@@ -475,6 +545,7 @@ int main(void)
     t_heat_cap();
     t_heat_cap_waits();
     t_save_held();
+    t_app_request();
     t_picker_timeout();
     t_flash_writes();
     CHECK(write_too_long == 0, "%d flash writes longer than DEV_FLASH_WRITE_MAX", write_too_long);

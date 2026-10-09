@@ -72,6 +72,30 @@ static void hold_save(volatile ramp_state_t *st)
 #endif
 }
 
+/* ---- the slot's own values ----------------------------------------------- */
+
+static u16 saved_check(volatile ramp_state_t *st)
+{
+    return (u16)(0xa5c9u ^ st->saved_f ^ (u16)(st->saved_c << 3) ^
+                 (u16)(st->rank << 11) ^ (u16)(st->bank << 14));
+}
+
+/* A preset slot is only ever written back from a saved pair this code can
+ * prove it took from that slot: a sentinel (every sentinel-armed ramp), or,
+ * for an app-requested ramp on a real preset, the check try_arm stored plus a
+ * plausible temperature in each unit. F and C are NOT required to agree:
+ * stock doesn't keep them in step (the Carta 2's preset-table write in C,
+ * 0x126a6, stores F = (9C + 288) / 5, about 26 F high), and a slot rejected
+ * here would keep the stage temperature for good. */
+static u8 saved_ok(volatile ramp_state_t *st)
+{
+    if (IS_SENTINEL(st->saved_f, st->saved_c))
+        return 1;
+    if (!st->requested || st->saved_chk != saved_check(st))
+        return 0;
+    return st->saved_f >= 100 && st->saved_f <= 700 && st->saved_c >= 38 && st->saved_c <= 371;
+}
+
 /* ---- arming --------------------------------------------------------------- */
 
 /* A waypoint read back from flash is only used if it is a temperature the
@@ -131,13 +155,18 @@ static void try_arm(volatile ramp_state_t *st)
     u8 rank = DEV_RANK(bank);
     u16 f, c;
     u16 total = 0;
-    u8 i, n;
+    u8 i, n, req;
+
+    /* An app request (ramp_marker_dispatch) applies to the session it
+     * started, which arms on its first tick: consumed here either way. */
+    req = st->start_req && DEV_SYS_TICK - st->start_req_t0 < RAMP_REQUEST_TICKS;
+    st->start_req = 0;
 
     if (rank > RAMP_MAX_RANK || DEV_ARM_BLOCKED())
         return;
     f = *PRESET(bank ? TBL_CO_F : TBL_FL_F, rank);
     c = *PRESET(bank ? TBL_CO_C : TBL_FL_C, rank);
-    if (!IS_SENTINEL(f, c) || st->arm_failed || !ramp_enabled())
+    if (!(IS_SENTINEL(f, c) || req) || st->arm_failed || !ramp_enabled())
         return;
     n = load_stages(st, bank);
     if (n == 0 && bank == 1)
@@ -145,6 +174,9 @@ static void try_arm(volatile ramp_state_t *st)
     if (n == 0 || n == STORE_UNUSABLE) {
         st->arm_failed = 1;   /* nothing usable for this mode: an ordinary
                                * session; don't re-read flash every tick */
+        if (req)
+            stock_stop();     /* asked for a ramp, not a session at the
+                               * preset's temperature: stop instead */
         return;
     }
 
@@ -157,6 +189,8 @@ static void try_arm(volatile ramp_state_t *st)
     st->total_s = total;
     st->saved_f = f;
     st->saved_c = c;
+    st->requested = req && !IS_SENTINEL(f, c);
+    st->saved_chk = saved_check(st);
     st->counted = 0;
     st->frame_drawn = 0;
     st->trace_n = 0;
@@ -171,11 +205,11 @@ static void try_arm(volatile ramp_state_t *st)
 /* Restores the slot only when the state is provably one try_arm wrote: the
  * RAM it lives in isn't cleared at boot, so after a reset mid-ramp (or random
  * power-on contents that happen to match the magic) it must never write a
- * preset slot from unchecked fields. A ramp is only ever armed from a
- * sentinel slot, so a valid saved pair is always a sentinel. */
+ * preset slot from unchecked fields: saved_ok() must hold (a sentinel, or an
+ * app-requested ramp's checked pair). */
 static void disarm(volatile ramp_state_t *st)
 {
-    if (st->bank <= 1 && st->rank <= RAMP_MAX_RANK && IS_SENTINEL(st->saved_f, st->saved_c)) {
+    if (st->bank <= 1 && st->rank <= RAMP_MAX_RANK && saved_ok(st)) {
         write_slot(st, st->saved_f, st->saved_c);
         if (st->counted) {
             volatile u8 *d = (volatile u8 *)DEV_DAB_BASE;
@@ -209,6 +243,8 @@ static void ramp_tick(void)
         st->ann_tries = 0;
         st->press_awake = 0;
         st->save_held = 0;
+        st->start_req = 0;
+        st->requested = 0;
     }
 
     ramp_announce_tick(st);
@@ -307,7 +343,8 @@ static void ramp_tick(void)
          * only ever see them. The heater target is unaffected -- stock reloads
          * it from the slot only while "reached" is 0, which, if it is, means
          * one second at the sentinel instead of the last stage's target. */
-        write_slot(st, st->saved_f, st->saved_c);
+        if (saved_ok(st))
+            write_slot(st, st->saved_f, st->saved_c);
         return;
     }
 

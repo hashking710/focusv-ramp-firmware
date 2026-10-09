@@ -9,9 +9,13 @@
  *
  * HOW A RAMP RUNS -- by reusing stock mechanisms rather than fighting them:
  *
- *  Arming. The app starts a normal session at a sentinel temperature (150 F /
- *  65 C) on any preset slot. The first tick that sees it arms the ramp, if
- *  waypoints are saved for the active mode.
+ *  Arming. Terpline sends the stock session start (marker 0xA5) with every
+ *  current value echoed and a ramp request in byte 14 (stock never reads it);
+ *  the session that start begins arms on its first tick, on whatever preset
+ *  is active, and that slot is put back afterwards (saved_ok). A request with
+ *  nothing to run stops the session. A preset slot holding the sentinel
+ *  (150 F / 65 C) arms the same way, so a ramp also starts from the device's
+ *  own buttons.
  *
  *  Target. Each stock orchestrator reloads the PID target pair (C and F) from
  *  the active preset slot every tick while the "reached" flag is 0, before the
@@ -154,6 +158,13 @@ static inline u8 ramp_enabled(void)
 /* Sent as a SET_TEMP marker with the offset in packet byte 14 (unread by stock
  * firmware; see ramp_marker_entry.s). Byte 14 is zero in every other packet. */
 #define RAMP_OFFSET_MARKER   0xbb
+/* App-started ramp: the stock session-start marker (A5) with this in packet
+ * byte 14 -- unread by stock firmware -- asks for the session it starts to run
+ * as a ramp, on whatever preset is active, with every preset value left as it
+ * was (Terpline echoes them). It holds for RAMP_REQUEST_TICKS; see try_arm. */
+#define RAMP_START_MARKER    0xa5
+#define RAMP_START_REQUEST   0x52   /* 'R' */
+#define RAMP_REQUEST_TICKS   (3u * 16u * 1000u * 1000u)
 
 /* The chip's free-running system timer (SDK reg_system_tick, 16 ticks per us;
  * read throughout the stock image). Wraps every ~268 s, so only differences
@@ -228,6 +239,10 @@ typedef struct {
     u8  picker_enabled; /* the ramp system's on/off, cached while the picker shows */
     u32 picker_t0;    /* system tick of the picker's last event (timeout) */
     u8  save_held;    /* a stock settings save was pending when / while the ramp ran */
+    u8  start_req;    /* the app asked for the next session to run as a ramp */
+    u32 start_req_t0; /* system tick of that request */
+    u8  requested;    /* this ramp was armed by that request, on a real preset */
+    u16 saved_chk;    /* proof that saved_f / saved_c / rank / bank are try_arm's */
     u8  press_awake;  /* Aeris/Sport: the device was fully on when the button
                        * went down (not woken from standby by that press) */
     u16 heat_s;       /* seconds this stage has spent heating, not at temperature */

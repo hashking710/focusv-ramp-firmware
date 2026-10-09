@@ -1,110 +1,161 @@
 #!/usr/bin/env python3
 """
-make_logo.py -- turns the Terpline logo into carta2/logo_strip.h: the small
-multi-colour strip (flame mark + "Terpline" wordmark) drawn under the Carta 2
-ramp chart.
+make_logo.py -- turns the Terpline logo into carta2/logo_strip.h: the strip
+(flame mark + "Terpline" wordmark) drawn under the Carta 2 ramp chart.
 
-The firmware can only draw solid rectangles and one-colour bitmaps, so the
-strip is stored as horizontal runs -- (x, length, row, colour) -- each drawn
-with one fill_rect, in a palette of a few flat brand colours.
+The strip is a full-colour RGB565 image, streamed to the panel through the
+stock LCD driver (see logo_blit in carta2/ramp_display.c). Both parts are cut
+from the full-resolution logo, so the real gradients and the real wordmark come
+through:
+  - the badge's near-black background is clipped to true black, so the strip
+    sits seamlessly on the ramp screen's black;
+  - each part is scaled down in linear light (Lanczos), which keeps thin edges
+    and the colour gradients right, then lightly sharpened for the tiny size;
+  - the result is quantised to RGB565 with error diffusion, so the gradients
+    don't band.
 
 Usage:
-    python3 tools/make_logo.py --logo "path/to/logo 192.png" [--preview strip.png]
+    python3 tools/make_logo.py --mark mark.png --word wordmark.png [--preview strip.png]
+    python3 tools/make_logo.py --logo logo.png [--preview strip.png]
+--mark / --word: hand-cut art with a transparent background (preferred; the
+alpha gives clean edges on black). --logo: the 1254 x 1254 master, cut
+automatically (the badge ring and swoosh sit close to the wordmark).
 """
 import argparse
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageFilter
 
 REPO = Path(__file__).resolve().parent.parent
 
-STRIP_W, STRIP_H = 240, 23          # drawn at x 0-239, y 202-224 on the device
-STRIP_Y = 202
+STRIP_Y = 202                       # drawn at y 202-224 on the device
+STRIP_H = 23
+LEFT = 6                            # the screen's common left edge
+GAP = 5                             # between the mark and the wordmark
 MARK_H = 23                         # flame mark height, px
-WORD_PX = 21                        # wordmark font size, px
+WORD_H = 21                         # wordmark height (cap top to descender), px
 
-# flat brand colours sampled from the logo's flame: cyan -> green -> yellow -> orange
-PALETTE = [(0, 190, 210), (40, 200, 70), (240, 220, 20), (255, 135, 0)]
-
-FONTS = ["C:/Windows/Fonts/segoeuib.ttf", "C:/Windows/Fonts/arialbd.ttf",
-         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]
-
-
-def rgb565(r, g, b):
-    return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+# regions of the 1254 px master, as fractions so a resized master still works
+MARK_BOX = (385 / 1254, 122 / 1254, 868 / 1254, 728 / 1254)
+WORD_BOX = (120 / 1254, 728 / 1254, 1100 / 1254, 950 / 1254)
+WORD_BASELINE = 900 / 1254          # below it only the p's descender belongs to the wordmark
+SHARPEN = 0                         # unsharp percent; 0 = none (it rings on the emboss shadow)
+BLACK_POINT = 30                    # the badge background is about rgb(11, 15, 21)
+TRIM = 48                           # a pixel this bright belongs to the art (for the tight crop)
 
 
-def nearest(rgb):
-    return min(range(len(PALETTE)), key=lambda i: sum((a - b) ** 2 for a, b in zip(rgb, PALETTE[i])))
+def to_linear(v):
+    v /= 255.0
+    return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
 
 
-def flame_mark(logo_path):
-    """The flame + leaf, cropped from inside the badge ring, as palette indices."""
-    im = Image.open(logo_path).convert("RGBA")
-    w, h = im.size
-    box = (int(w * 0.31), int(h * 0.10), int(w * 0.705), int(h * 0.585))
-    crop = im.crop(box)
-    cw, ch = crop.size
-    out_w = max(1, round(cw * MARK_H / ch))
-    small = crop.resize((out_w, MARK_H), Image.LANCZOS)
-    px = {}
-    for y in range(MARK_H):
-        for x in range(out_w):
-            r, g, b, a = small.getpixel((x, y))
-            if a < 128 or max(r, g, b) < 95 or max(r, g, b) - min(r, g, b) < 55:
-                continue                    # background / dark outline
-            px[(x, y)] = nearest((r, g, b))
-    return px, out_w
+def to_srgb(v):
+    v = min(max(v, 0.0), 1.0)
+    return 255.0 * (12.92 * v if v <= 0.0031308 else 1.055 * v ** (1 / 2.4) - 0.055)
 
 
-def wordmark():
-    """'Terpline' in a bold sans, coloured by a left-to-right sweep through the palette."""
-    font = next((ImageFont.truetype(f, WORD_PX) for f in FONTS if Path(f).exists()), None)
-    if font is None:
-        raise SystemExit("no bold TrueType font found -- edit FONTS")
-    x0, y0, x1, y1 = font.getbbox("Terpline")
-    tw, th = x1 - x0, y1 - y0
-    mask = Image.new("L", (tw, th), 0)
-    ImageDraw.Draw(mask).text((-x0, -y0), "Terpline", font=font, fill=255)
-    px = {}
-    for y in range(th):
-        for x in range(tw):
-            if mask.getpixel((x, y)) >= 128:
-                px[(x, y)] = min(len(PALETTE) - 1, x * len(PALETTE) // tw)
-    return px, tw, th
+LIN = [to_linear(float(i)) for i in range(256)]
+
+
+def drop_below(im, cut):
+    """Below row `cut`, keep only each column's art that runs on unbroken from
+    above it (the p's descender), and black out the rest (the swoosh)."""
+    px = im.load()
+    for x in range(im.width):
+        y = cut
+        while y < im.height and max(px[x, y]) >= TRIM:
+            y += 1
+        for yy in range(y, im.height):
+            px[x, yy] = (0, 0, 0)
+
+
+def part(master, box, out_h, baseline=None):
+    """Crop a region, clip the background to black, trim to the art, and scale
+    it to out_h rows in linear light."""
+    w, h = master.size
+    im = master.crop(tuple(int(round(f * s)) for f, s in zip(box, (w, h, w, h))))
+    im = im.point(lambda v: max(0, v - BLACK_POINT) * 255 // (255 - BLACK_POINT))
+    if baseline is not None:
+        drop_below(im, int(round(baseline * h)) - int(round(box[1] * h)))
+    bbox = im.convert("L").point(lambda v: 255 if v >= TRIM else 0).getbbox()
+    return scale(im.crop(bbox).convert("RGBA"), out_h)
+
+
+def cut_out(path, out_h):
+    """Hand-cut art with a transparent background, trimmed to its alpha."""
+    im = Image.open(path).convert("RGBA")
+    return scale(im.crop(im.getchannel("A").getbbox()), out_h)
+
+
+def scale(im, out_h):
+    """RGBA art onto black, scaled to out_h rows in linear light (each pixel
+    weighted by its alpha, so edges blend into the black cleanly)."""
+    out_w = max(1, round(im.width * out_h / im.height))
+    alpha = im.getchannel("A").load()
+    chans = []
+    for c in im.convert("RGB").split():                     # linear light, per channel
+        lin = Image.new("F", c.size)
+        src, dst = c.load(), lin.load()
+        for y in range(c.height):
+            for x in range(c.width):
+                dst[x, y] = LIN[src[x, y]] * alpha[x, y] / 255.0
+        small = lin.resize((out_w, out_h), Image.LANCZOS)
+        out = Image.new("L", small.size)
+        sp, op = small.load(), out.load()
+        for y in range(out_h):
+            for x in range(out_w):
+                op[x, y] = int(round(to_srgb(sp[x, y])))
+        chans.append(out)
+    rgb = Image.merge("RGB", chans)
+    if SHARPEN:
+        rgb = rgb.filter(ImageFilter.UnsharpMask(radius=0.6, percent=SHARPEN, threshold=0))
+    return rgb
+
+
+def quantise(img):
+    """RGB565 with Floyd-Steinberg error diffusion; pure black stays 0."""
+    w, h = img.size
+    px = [[list(map(float, img.getpixel((x, y)))) for x in range(w)] for y in range(h)]
+    out = [[0] * w for _ in range(h)]
+    bits = (5, 6, 5)
+    for y in range(h):
+        for x in range(w):
+            old = px[y][x]
+            q, err = [], []
+            for v, b in zip(old, bits):
+                v = min(max(v, 0.0), 255.0)
+                levels = (1 << b) - 1
+                n = int(round(v * levels / 255.0))
+                q.append(n)
+                err.append(v - n * 255.0 / levels)
+            out[y][x] = (q[0] << 11) | (q[1] << 5) | q[2]
+            for dx, dy, f in ((1, 0, 7 / 16), (-1, 1, 3 / 16), (0, 1, 5 / 16), (1, 1, 1 / 16)):
+                xx, yy = x + dx, y + dy
+                if 0 <= xx < w and yy < h:
+                    for k in range(3):
+                        px[yy][xx][k] += err[k] * f
+    return out
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--logo", required=True)
+    ap.add_argument("--logo", help="the master logo, cut automatically")
+    ap.add_argument("--mark", help="the flame mark, hand-cut, transparent background")
+    ap.add_argument("--word", help="the wordmark, hand-cut, transparent background")
     ap.add_argument("--preview")
     a = ap.parse_args()
+    if not (a.mark and a.word) and not a.logo:
+        ap.error("give --mark and --word, or --logo")
 
-    mark, mw = flame_mark(a.logo)
-    word, ww, wh = wordmark()
-    gap = 6
-    left = 6                         # the screen's common left edge
-    pix = {}
-    for (x, y), c in mark.items():
-        pix[(left + x, y)] = c
-    wy = (STRIP_H - wh) // 2
-    for (x, y), c in word.items():
-        pix[(left + mw + gap + x, wy + y)] = c
+    master = Image.open(a.logo).convert("RGB") if a.logo else None
+    mark = cut_out(a.mark, MARK_H) if a.mark else part(master, MARK_BOX, MARK_H)
+    word = cut_out(a.word, WORD_H) if a.word else part(master, WORD_BOX, WORD_H, WORD_BASELINE)
 
-    runs = []
-    for y in range(STRIP_H):
-        x = 0
-        while x < STRIP_W:
-            c = pix.get((x, y))
-            if c is None:
-                x += 1
-                continue
-            n = 1
-            while x + n < STRIP_W and pix.get((x + n, y)) == c:
-                n += 1
-            runs.append((x, n, y, c))
-            x += n
-    assert STRIP_H <= 32 and len(PALETTE) <= 8   # row and colour share one byte
+    strip_w = mark.width + GAP + word.width
+    strip = Image.new("RGB", (strip_w, STRIP_H))
+    strip.paste(mark, (0, (STRIP_H - MARK_H) // 2))
+    strip.paste(word, (mark.width + GAP, (STRIP_H - WORD_H) // 2))
+    pix = quantise(strip)
 
     # "DABS" label for the dab counter, a hand-drawn 5 x 7 pixel font so it
     # stays crisp at this size; drawn by the firmware just left of the count
@@ -114,12 +165,12 @@ def main():
         "B": ["11110", "10001", "10001", "11110", "10001", "10001", "11110"],
         "S": ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
     }
-    label = {}
+    label = set()
     for k, ch in enumerate("DABS"):
         for y, row in enumerate(glyphs[ch]):
             for x, bit in enumerate(row):
                 if bit == "1":
-                    label[(k * 6 + x, y)] = 0
+                    label.add((k * 6 + x, y))
     label_w, label_h = 4 * 6 - 1, 7
     label_runs = []
     for y in range(label_h):
@@ -136,20 +187,20 @@ def main():
 
     lines = [
         "/* logo_strip.h -- generated by tools/make_logo.py from the Terpline logo; do not edit.",
-        " * The flame mark + \"Terpline\" wordmark as horizontal runs, one fill_rect each:",
-        " * {x, length, row << 3 | colour}. */",
+        " * The flame mark + \"Terpline\" wordmark as an RGB565 image, row by row, each",
+        " * pixel high byte first (the order the panel takes it). */",
+        f"#define LOGO_X      {LEFT}",
         f"#define LOGO_Y      {STRIP_Y}",
+        f"#define LOGO_PW     {strip_w}   /* image width, px */",
         f"#define LOGO_H      {STRIP_H}",
-        f"#define LOGO_RUNS   {len(runs)}",
-        "static const u16 LOGO_PAL[" + str(len(PALETTE)) + "] = { " +
-        ", ".join(f"0x{rgb565(*c):04X}" for c in PALETTE) + " };",
-        "static const u8 LOGO_RUN[LOGO_RUNS][3] = {",
+        f"#define LOGO_W      {LEFT + strip_w}   /* the logo ends here; the dab count is right of it */",
+        f"static const u8 LOGO_PIX[{strip_w * STRIP_H * 2}] = {{",
     ]
-    for i in range(0, len(runs), 6):
-        lines.append("    " + " ".join(f"{{{x},{n},{(y << 3) | c}}}," for x, n, y, c in runs[i:i + 6]))
+    flat = [v for row in pix for v in row]
+    for i in range(0, len(flat), 12):
+        lines.append("    " + " ".join(f"0x{v >> 8:02X},0x{v & 0xFF:02X}," for v in flat[i:i + 12]))
     lines.append("};")
     lines += [
-        f"#define LOGO_W      {left + mw + gap + ww}   /* the logo ends here; the dab count is right of it */",
         f"#define LABEL_W     {label_w}",
         f"#define LABEL_H     {label_h}",
         f"#define LABEL_RUNS  {len(label_runs)}",
@@ -159,13 +210,16 @@ def main():
         lines.append("    " + " ".join(f"{{{x},{n},{y}}}," for x, n, y in label_runs[i:i + 8]))
     lines.append("};")
     (REPO / "carta2" / "logo_strip.h").write_text("\n".join(lines) + "\n", newline="\n")
-    print(f"logo_strip.h: {len(runs)} runs, {len(runs) * 3 + len(PALETTE) * 2} bytes; mark {mw}px + wordmark {ww}x{wh}px")
+    print(f"logo_strip.h: {strip_w} x {STRIP_H} px, {strip_w * STRIP_H * 2} bytes; "
+          f"mark {mark.width}px + wordmark {word.width}x{WORD_H}px")
 
     if a.preview:
-        img = Image.new("RGB", (STRIP_W, STRIP_H))
-        for (x, y), c in pix.items():
-            img.putpixel((x, y), PALETTE[c])
-        img.resize((STRIP_W * 4, STRIP_H * 4), Image.NEAREST).save(a.preview)
+        img = Image.new("RGB", (strip_w, STRIP_H))
+        for y in range(STRIP_H):
+            for x in range(strip_w):
+                v = pix[y][x]
+                img.putpixel((x, y), (((v >> 11) & 31) * 255 // 31, ((v >> 5) & 63) * 255 // 63, (v & 31) * 255 // 31))
+        img.resize((strip_w * 8, STRIP_H * 8), Image.NEAREST).save(a.preview)
 
 
 if __name__ == "__main__":

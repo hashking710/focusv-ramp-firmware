@@ -45,7 +45,7 @@ DEVICES = {
     'carta2': dict(
         src=['common/ramp_core.c', 'common/ramp_store.c', 'common/ramp_picker.c', 'common/ramp_presets.c', 'common/ramp_announce.c', 'carta2/ramp_display.c', 'carta2/ramp_input.c'],
         asm=['carta2/ramp_marker_entry.s'],
-        inject=0x30000, end=0x33000, ota_max=248 << 10, bank=0x40000, store=0xf0000,
+        inject=0x30000, end=0x35000, ota_max=248 << 10, bank=0x40000, store=0xf0000,
         sites=[(0x6e2e, 'ramp_trampoline', 'tjl 0xaf2c'),
                (0x11d96, 'ramp_marker_entry', 'tmovs r3, #40'),
                (0x6d0c, 'ramp_event_entry', 'tjl 0x5618'),

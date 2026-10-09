@@ -20,6 +20,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include "ramp.h"
+#include "logo_strip.h"
 
 void ramp_trampoline(void);
 void ramp_d3c0_full(void);
@@ -70,6 +71,40 @@ static void s_batt_anim(int x, int y, int w, int h, int a, int b, int c, int d, 
     s_fill((u8)x, (u8)y, (u8)w, (u8)h, 0x07, 0xe0);
 }
 
+/* The ST7789 driver under fill_rect (0x7464 window, 0xc60 command, 0xca8
+ * data), as the logo uses it: a window, then 0x2C and two bytes per pixel,
+ * filling the window row by row. Flags any pixel outside the window, a half
+ * pixel, or a write that ends short of the window. */
+static int win_x0, win_y0, win_x1, win_y1, cur_x, cur_y, ram_write, have_hi, lcd_bad;
+static long lcd_px, lcd_area;
+static u8 hi_byte;
+static void s_lcd_window(int x0, int y0, int x1, int y1)
+{
+    prims++;
+    if (x0 < 0 || y0 < 0 || x1 >= W || y1 >= H || x0 > x1 || y0 > y1) oob++;
+    win_x0 = x0; win_y0 = y0; win_x1 = x1; win_y1 = y1;
+    ram_write = 0;
+}
+static void s_lcd_cmd(u8 b)
+{
+    if (ram_write && (have_hi || lcd_px != lcd_area)) lcd_bad++;   /* ended mid-pixel or short */
+    ram_write = b == 0x2c;
+    if (ram_write) {
+        cur_x = win_x0; cur_y = win_y0; have_hi = 0;
+        lcd_px = 0; lcd_area = (long)(win_x1 - win_x0 + 1) * (win_y1 - win_y0 + 1);
+    }
+}
+static void s_lcd_data(u8 b)
+{
+    if (!ram_write) { lcd_bad++; return; }
+    if (!have_hi) { hi_byte = b; have_hi = 1; return; }
+    have_hi = 0;
+    if (cur_y > win_y1) { lcd_bad++; return; }                       /* past the window */
+    put(cur_x, cur_y, (unsigned short)(hi_byte << 8 | b));
+    lcd_px++;
+    if (++cur_x > win_x1) { cur_x = win_x0; cur_y++; }
+}
+
 static void s_noop(void) {}
 static short s_div(int a, int b) { return (short)(a / b); }
 static void s_flash_read(int addr, int len, void *buf) { memcpy(buf, flash_store + (addr - DEV_RAMP_FLASH), len); }
@@ -110,6 +145,9 @@ void *sim_fn(unsigned int a)
     case 0x74d0: return (void *)s_fill;
     case 0x7e2c: return (void *)s_blit;
     case 0x7a24: return (void *)s_batt_anim;
+    case 0x7464: return (void *)s_lcd_window;
+    case 0x0c60: return (void *)s_lcd_cmd;
+    case 0x0ca8: return (void *)s_lcd_data;
     case DEV_PID_TICK: return (void *)s_pid_tick;
     case DEV_STOP: return (void *)s_stop;
     case DEV_ROM_DIV: return (void *)s_div;
@@ -193,13 +231,33 @@ int main(int argc, char **argv)
                 CHECK(lit_in(0, 0, 239, 60) > 200, "header (battery, time, goal, live temp) barely drawn");
                 CHECK(lit_in(6, 70, 219, 196) > 300, "chart area barely drawn");
                 CHECK(lit_in(226, 72, 233, 196) > 30, "heat meter not drawn");
+                {   /* the logo, pixel for pixel, where it belongs */
+                    int x, y, bad = 0;
+                    for (y = 0; y < LOGO_H; y++)
+                        for (x = 0; x < LOGO_PW; x++) {
+                            const u8 *p = LOGO_PIX + 2 * (y * LOGO_PW + x);
+                            bad += fb[LOGO_Y + y][LOGO_X + x] != (unsigned short)(p[0] << 8 | p[1]);
+                        }
+                    CHECK(bad == 0, "%d logo pixels differ from the image", bad);
+                }
             }
         }
     }
     CHECK(drawn == 2, "ramp never reached stage 3 on screen");
     CHECK(prims > 100, "only %d draw calls", prims);
     CHECK(oob == 0, "%d draws outside the 240x240 screen", oob);
+    CHECK(lcd_bad == 0, "%d malformed LCD writes (outside the window, half a pixel, or short)", lcd_bad);
     printf("  ramp screen: %d draw calls, %d out of bounds, ended after %d ticks\n", prims, oob, i);
+
+    /* stock mode: even with a ramp state active, the hooks draw nothing of
+     * their own -- every one calls the stock function (a no-op here) */
+    st->stage = 1; st->n_stages = 2; S(OFF_SESSION) = 1;
+    st->stock_mode = 1;
+    memset(fb, 0, sizeof fb);
+    ramp_d3c0_full();
+    ramp_d3c0_view();
+    CHECK(lit_in(0, 0, 239, 239) == 0, "the ramp screen drew in stock mode");
+    st->stock_mode = 0; st->stage = 0; S(OFF_SESSION) = 0;
 
     /* the picker box, on and off */
     memset(fb, 0, sizeof fb);

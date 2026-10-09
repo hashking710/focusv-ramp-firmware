@@ -115,7 +115,7 @@ press, so stepping through presets could switch the system off.
 | 3 sites | `0xdb40` battery | hidden during a ramp (drawn by the ramp screen) |
 | 2 sites each | `0xd048` dab counter, `0xe42c` mode icon, `0xe300` status icon, `0xe2b4` READY banner | hidden during a ramp |
 
-The code goes at flash 0x30000 and runs at 0x30028, and the output image ends at 0x33000. The ramp
+The code (with the full-colour logo) goes at flash 0x30000 and runs at 0x30028, and the output image ends at 0x35000, well inside the 248 KB the stock OTA accepts. The ramp
 store has its own sector at 0xf0000, outside both OTA banks: stock erases the bank it isn't
 running from at every boot, so a store inside the image would be lost after an OTA install. Every
 stock erase site is traced in [`device.h`](device.h); nothing stock touches 0xe7000-0xfdfff.

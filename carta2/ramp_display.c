@@ -41,6 +41,8 @@
  * draw (w+1) x (h+1) px, opaquely; blit writes set bits black and clear bits in
  * the colour, unless BOTH colour bytes are exactly 0xA5 (then a gradient table),
  * which no colour here is. Glyph pointers are runtime flash addresses.
+ * The logo is a full-colour image, streamed through the same LCD driver
+ * fill_rect uses (see logo_blit).
  */
 #include "ramp.h"
 #include "logo_strip.h"
@@ -51,6 +53,17 @@ typedef void (*batt_anim_fn)(int x, int y, int w, int h, int a, int b, int c, in
 #define fill_rect   STOCK_FN(fill_rect_fn, 0x74d0)
 #define blit        STOCK_FN(blit_fn, 0x7e2c)
 #define batt_anim   STOCK_FN(batt_anim_fn, 0x7a24)   /* db40's charging animation */
+/* The ST7789 driver under fill_rect (0x74d0): 0x7464 (x0, y0, x1, y1) pulls
+ * CS low (0x80059b bit 2) and sends CASET 0x2A x0..x1 and RASET 0x2B
+ * y0+80..y1+80, inclusive; 0xc60 sends a command byte (DC low), 0xca8 one
+ * data byte, each waiting for the SPI. fill_rect: window, 0x2C (memory
+ * write), two bytes per pixel high first, then 0x29 and CS high. */
+typedef void (*lcd_window_fn)(int x0, int y0, int x1, int y1);
+typedef void (*lcd_byte_fn)(u8 b);
+#define lcd_window  STOCK_FN(lcd_window_fn, 0x7464)
+#define lcd_cmd     STOCK_FN(lcd_byte_fn, 0xc60)
+#define lcd_data    STOCK_FN(lcd_byte_fn, 0xca8)
+#define LCD_CS      (*(volatile u8 *)0x80059b)
 #define orig_d3c0   STOCK_FN(void_fn, 0xd3c0)
 #define orig_dcac   STOCK_FN(void_fn, 0xdcac)
 /* 0xce70 returns the target it drew (the active slot in the display unit);
@@ -330,6 +343,19 @@ static void draw_column(volatile ramp_state_t *st, scale_t *s, int c)
     }
 }
 
+/* The logo (logo_strip.h): every pixel streamed in one window, exactly the
+ * sequence fill_rect uses, with the image's own colours instead of one. */
+static void logo_blit(void)
+{
+    int i;
+    lcd_window(LOGO_X, LOGO_Y, LOGO_X + LOGO_PW - 1, LOGO_Y + LOGO_H - 1);
+    lcd_cmd(0x2c);
+    for (i = 0; i < (int)sizeof LOGO_PIX; i++)
+        lcd_data(LOGO_PIX[i]);
+    lcd_cmd(0x29);
+    LCD_CS |= 4;
+}
+
 static void draw_chart(volatile ramp_state_t *st, scale_t *s)
 {
     int c;
@@ -339,9 +365,7 @@ static void draw_chart(volatile ramp_state_t *st, scale_t *s)
     rect(AX_L, BASE_Y, AX_R - AX_L + 1, 1, C_AXIS);
     for (c = 0; c < RAMP_TRACE_LEN; c++)
         draw_column(st, s, c);
-    for (c = 0; c < LOGO_RUNS; c++)                /* the logo: one rect per run */
-        rect(LOGO_RUN[c][0], LOGO_Y + (LOGO_RUN[c][2] >> 3), LOGO_RUN[c][1], 1,
-             LOGO_PAL[LOGO_RUN[c][2] & 7]);
+    logo_blit();
 }
 
 /* Records the trace up to "now" and redraws only what changed. Stepping back
@@ -438,27 +462,34 @@ static void ramp_draw(volatile ramp_state_t *st)
 
 /* ---- hooks -------------------------------------------------------------------- */
 
+/* The ramp screen shows only while a ramp runs, and never in stock mode: the
+ * idle and live screens are always the stock ones. */
+static u8 owns_screen(volatile ramp_state_t *st)
+{
+    return ramp_active(st) && !st->stock_mode;
+}
+
 void ramp_d3c0_full(void)
 {
     volatile ramp_state_t *st = RAMP_STATE;
-    if (!ramp_active(st)) { orig_d3c0(); return; }
+    if (!owns_screen(st)) { orig_d3c0(); return; }
     st->frame_drawn = 0;            /* fa1c cleared the screen first */
     ramp_draw(st);
 }
 void ramp_d3c0_view(void)
 {
     volatile ramp_state_t *st = RAMP_STATE;
-    if (!ramp_active(st)) { orig_d3c0(); return; }
+    if (!owns_screen(st)) { orig_d3c0(); return; }
     ramp_draw(st);
 }
 void ramp_dcac_full(void)
 {
-    if (!ramp_active(RAMP_STATE)) orig_dcac();
+    if (!owns_screen(RAMP_STATE)) orig_dcac();
 }
 void ramp_dcac_view(void)
 {
     volatile ramp_state_t *st = RAMP_STATE;
-    if (!ramp_active(st)) { orig_dcac(); return; }
+    if (!owns_screen(st)) { orig_dcac(); return; }
     ramp_draw(st);
 }
 /* Preset picker overlay (ramp_input.c): a black box over the stock target
@@ -486,7 +517,7 @@ u16 ramp_ce70_hide(void)
 {
     volatile ramp_state_t *st = RAMP_STATE;
     u16 v;
-    if (ramp_active(st)) {
+    if (owns_screen(st)) {
         u8 conc = STRUCT_BASE[0x09] == 1;
         u8 rank = STRUCT_BASE[conc ? 0x0b : 0x0a];
         if (STRUCT_BASE[0x07] == 1)
@@ -494,13 +525,13 @@ u16 ramp_ce70_hide(void)
         return *PRESET(conc ? TBL_CO_C : TBL_FL_C, rank);
     }
     v = orig_ce70();
-    if (st->picker_on && DEV_PICKER_SCREEN())
+    if (st->picker_on && !st->stock_mode && DEV_PICKER_SCREEN())
         ramp_picker_draw(st->picker_sel, st->picker_enabled);
     return v;
 }
-void ramp_cf58_hide(void) { if (!ramp_active(RAMP_STATE)) orig_cf58(); }
-void ramp_db40_hide(void) { if (!ramp_active(RAMP_STATE)) orig_db40(); }
-void ramp_d048_hide(void) { if (!ramp_active(RAMP_STATE)) orig_d048(); }
-void ramp_e42c_hide(void) { if (!ramp_active(RAMP_STATE)) orig_e42c(); }
-void ramp_e300_hide(void) { if (!ramp_active(RAMP_STATE)) orig_e300(); }
-void ramp_e2b4_hide(void) { if (!ramp_active(RAMP_STATE)) orig_e2b4(); }
+void ramp_cf58_hide(void) { if (!owns_screen(RAMP_STATE)) orig_cf58(); }
+void ramp_db40_hide(void) { if (!owns_screen(RAMP_STATE)) orig_db40(); }
+void ramp_d048_hide(void) { if (!owns_screen(RAMP_STATE)) orig_d048(); }
+void ramp_e42c_hide(void) { if (!owns_screen(RAMP_STATE)) orig_e42c(); }
+void ramp_e300_hide(void) { if (!owns_screen(RAMP_STATE)) orig_e300(); }
+void ramp_e2b4_hide(void) { if (!owns_screen(RAMP_STATE)) orig_e2b4(); }

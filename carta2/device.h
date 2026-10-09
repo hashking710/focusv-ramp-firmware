@@ -71,7 +71,7 @@
  * screensaver slots 0x8f000-0xc7fff (0x12952, bounds 0x12a90-0x12aa0),
  * session log ring 0xcb000 + (n % 28) * 0x1000 up to 0xe6fff (0x64ae), SDK
  * MAC / calibration 0xff000 / 0xfe000 (.data). 0xe7000-0xfdfff is unused.
- * Code gets 0x30000-0x32fff. */
+ * Code and the logo image get 0x30000-0x34fff. */
 #define DEV_RAMP_FLASH      0xf0000
 #define DEV_FLASH_READ      0x9c0
 #define DEV_FLASH_ERASE     0x924

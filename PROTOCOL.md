@@ -116,8 +116,19 @@ Send the stock start with byte 14 = `0x52` and **every value echoed**, including
 both ranks. The device starts the preset that's already active; the patch runs
 the mode's saved stages (in concentrate with none saved, the selected built-in
 preset) and puts that preset back exactly afterwards. With nothing to run, the
-session is stopped. The request is valid for 3 seconds. Stop a ramp the stock
-way (`0xAF`), or with the device's button.
+session is stopped. The request is valid for 3 seconds. The device announces
+the ramp starting and ending (flags bit 2).
+
+Stop a ramp the stock way, marker `0xAF` -- **with every value echoed**, like
+any other `0xCC` packet: stock writes the presets and ranks before it reads the
+marker, so zeros there would set the custom preset to 0 and select it. Or press
+the device's button.
+
+During a ramp, any `0xCC` packet that changes either rank (or the device's
+atomizer changing) hands the session back to stock: the ramp ends, its preset
+is put back, and the session carries on as a plain session of the newly active
+preset, at that preset's temperature and for its hold. Echo the ranks to avoid
+it.
 
 ### Uploading a ramp
 

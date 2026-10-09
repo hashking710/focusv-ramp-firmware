@@ -236,6 +236,12 @@ static void ramp_tick(void)
 
     if (st->magic != RAMP_MAGIC) {
         st->stock_mode = ramp_store_stock_mode();   /* before the magic makes it the answer */
+        st->boot_mod = 0;
+        st->boot_presses = 0;
+        st->boot_down = 0;
+        st->boot_swallow = 0;
+        st->boot_post = 0;
+        st->boot_seen = DEV_SYS_TICK - RAMP_SYS_TICKS_PER_S;   /* the first sample is a fresh start */
         st->magic = RAMP_MAGIC;
         st->stage = 0;
         st->arm_failed = 0;

@@ -259,6 +259,46 @@ int main(int argc, char **argv)
     CHECK(lit_in(0, 0, 239, 239) == 0, "the ramp screen drew in stock mode");
     st->stock_mode = 0; st->stage = 0; S(OFF_SESSION) = 0;
 
+    /* the boot gesture: off, - or + held, five main-button presses */
+    {
+        volatile u8 *pc = (volatile u8 *)0x800590, *pd = (volatile u8 *)0x800598, *mb = (volatile u8 *)0x84319c;
+        int k;
+        S(OFF_SESSION) = 0; S(OFF_SCREEN) = 0; *pc = 0xff; *pd = 0xff; mb[1] = 0;
+        tick(); tick();
+        *pd &= ~0x40;                                          /* - held */
+        for (k = 0; k < 5; k++) { *pc &= ~1; tick(); tick(); *pc |= 1; tick(); }
+        tick();
+        CHECK(mb[1] == 1 && mb[0] == 11, "- + five presses didn't post the power-on (%d %d)", mb[0], mb[1]);
+        CHECK(!st->stock_mode && st->boot_swallow, "- should boot in ramp mode and hold its events");
+        mb[0] = 3; mb[1] = 1;                                  /* "- held" on the live screen */
+        ramp_event_entry();
+        CHECK(mb[1] == 0, "the held - reached stock after the boot gesture");
+        *pd |= 0x40; tick();                                   /* let go */
+        CHECK(!st->boot_swallow, "still swallowing after the release");
+        mb[0] = 3; mb[1] = 1;
+        ramp_event_entry();
+        CHECK(mb[1] == 1, "a later - was taken");
+        mb[1] = 0;
+
+        *pc &= ~0x40;                                          /* + held */
+        for (k = 0; k < 5; k++) { *pc &= ~1; tick(); tick(); *pc |= 1; tick(); }
+        tick();
+        CHECK(mb[1] == 1 && st->stock_mode, "+ + five presses should boot in stock mode");
+        *pc |= 0x40; tick(); mb[1] = 0;
+
+        *pd &= ~0x40;                                          /* too slow: nothing */
+        for (k = 0; k < 5; k++) { *pc &= ~1; tick(); tick(); *pc |= 1; tick(); tick(); tick(); tick(); tick(); tick(); tick(); tick(); tick(); tick(); tick(); }
+        CHECK(mb[1] == 0 && st->stock_mode, "a slow sequence switched the mode");
+
+        memset((void *)st, 0xa7, sizeof *st);                 /* woken from sleep: the waking press counts */
+        *pc &= ~1; tick(); tick(); *pc |= 1; tick();
+        for (k = 0; k < 4; k++) { *pc &= ~1; tick(); tick(); *pc |= 1; tick(); }
+        tick();
+        CHECK(mb[1] == 1 && !st->stock_mode, "the press that woke the device didn't count");
+        *pd |= 0x40; tick(); mb[1] = 0;
+        S(OFF_SCREEN) = 1;
+    }
+
     /* the picker box, on and off */
     memset(fb, 0, sizeof fb);
     oob = 0;

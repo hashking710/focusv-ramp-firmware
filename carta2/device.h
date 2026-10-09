@@ -143,6 +143,8 @@
 void ramp_picker_closed_redraw(void);
 #define DEV_PICKER_CLOSED() ramp_picker_closed_redraw()
 
-#define DEV_AFTER_TICK(st)  ((void)0)   /* the screen draws from its own hooks */
+/* The screen draws from its own hooks; after each tick, the boot gesture. */
+void ramp_boot_tick(void);
+#define DEV_AFTER_TICK(st)  ramp_boot_tick()
 
 #endif

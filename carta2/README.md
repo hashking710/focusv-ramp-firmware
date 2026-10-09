@@ -80,6 +80,21 @@ The patch hooks the only call to the stock button-event consumer (0x5618):
 
 Outside a ramp, every event goes to the stock consumer unchanged.
 
+## Choosing Focus V or Terpline at power-on
+
+Off, hold **−** while pressing the main button five times: the Carta 2 powers on in ramp mode
+(Terpline). Hold **+** instead: it powers on in stock mode (Focus V), the patch a pass-through. The
+choice is kept in the store, so a plain five presses keeps whichever mode was used last, and the app
+switch works as before.
+
+Stock never sees these presses: with another button down its decoder ignores the main button
+(the button mask at `0xbea4` -- main PC0, + PC6, − PD6, active low -- sends masks 3 and 5 nowhere).
+So `ramp_boot_tick` (`ramp_input.c`, after every ramp tick, which also runs while off) counts them
+from the pins, sets the mode, and posts event 11, exactly what stock's own five presses post; in
+screen 0 that is the power-on (`0x56a8` -> `0x5ba0`). Until − / + is let go its events (1-4) are
+taken, so a finger still on it doesn't open the temperature editor. When the device was asleep, the
+press that woke it counts, as it does for stock's five presses.
+
 ## Preset picker and on/off
 
 **Not on the Carta 2 (disabled).** Every button gesture on the idle screen already has a stock

@@ -99,6 +99,11 @@ power-off; saved ramps, the preset choice and the offset are kept too. The
 switch is refused while a ramp runs. To remove the patch entirely, reflash the
 original firmware.
 
+The Carta 2 can also switch at power-on, with no app: holding − while pressing
+the power button five times starts it in ramp mode, holding + starts it in stock
+mode, and the choice is kept. Its announcement reports the result like any other
+switch.
+
 ### Starting a ramp
 
 Send the stock start with byte 14 = `0x52` and **every value echoed**, including

@@ -32,7 +32,9 @@ by, or sponsored by Focus V.
   buttons, screen, lights and sessions behave exactly like stock firmware, and no ramp starts.
   Another switches it back. Saved ramps and settings are kept, the mode survives power-off, and
   the device keeps announcing itself so it can always be switched back. Terpline has the switch;
-  [PROTOCOL.md](PROTOCOL.md) documents every packet for other apps.
+  [PROTOCOL.md](PROTOCOL.md) documents every packet for other apps. On the Carta 2 the power-on
+  chooses too: hold − while pressing the power button five times to start in ramp mode (Terpline),
+  hold + for stock mode (Focus V); a plain five presses keeps the last mode.
 - **Choosing a built-in ramp, and on/off, on the device (Aeris and Sport).** A hold from idle (a
   single press, LEDs on) opens a picker: single clicks step through four presets, shown in colour
   on the button light and the LEDs, triple click switches the ramp system on or off, hold leaves.

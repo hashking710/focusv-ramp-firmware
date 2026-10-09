@@ -84,10 +84,92 @@ void ramp_picker_closed_redraw(void)
     home_redraw();
 }
 
+/* ---- boot gesture ------------------------------------------------------------
+ * Off (screen 0), holding - or + while pressing the main button five times
+ * powers the device on in ramp mode (-: Terpline) or stock mode (+: Focus V),
+ * and remembers it; a plain five clicks keeps the mode. Stock never sees
+ * those presses: with another button down its decoder ignores the main
+ * button (masks 3 / 5 at 0xbea4 go nowhere). So they're counted here, from
+ * the pins the decoder reads, active low: main PC0, + PC6, - PD6. A press
+ * counts after two samples down (this runs at 40 Hz), presses within 1 s of
+ * each other. The fifth sets the mode and posts event 11 -- what stock's own
+ * five clicks post, and in screen 0 the power-on (0x56a8 -> 0x5ba0). Until
+ * the modifier is released its +/- events are taken, so a finger still on
+ * it doesn't open the temperature editor. Waking from sleep, the press that
+ * woke the device counts, as it does for stock's five clicks: a gap in the
+ * samples means a fresh start, where a press already down is new. */
+#define PIN_PC          (*(volatile u8 *)0x800590)
+#define PIN_PD          (*(volatile u8 *)0x800598)
+#define BTN_MAIN()      ((PIN_PC & 0x01) == 0)
+#define BTN_PLUS()      ((PIN_PC & 0x40) == 0)
+#define BTN_MINUS()     ((PIN_PD & 0x40) == 0)
+#define BOOT_PRESSES    5
+#define BOOT_GAP        RAMP_SYS_TICKS_PER_S          /* between presses */
+#define BOOT_FRESH      (RAMP_SYS_TICKS_PER_S / 5)    /* no sample for this long: a wake */
+
+void ramp_boot_tick(void)
+{
+    volatile ramp_state_t *st = RAMP_STATE;
+    volatile u8 *mb = EVENT_MAILBOX;
+    u8 main = BTN_MAIN(), mod;
+    u8 fresh;
+
+    if (st->magic != RAMP_MAGIC)
+        return;
+    fresh = DEV_SYS_TICK - st->boot_seen > BOOT_FRESH;
+    st->boot_seen = DEV_SYS_TICK;
+    if (st->boot_swallow && !BTN_MINUS() && !BTN_PLUS())
+        st->boot_swallow = 0;
+    if (st->boot_post) {                       /* the power-on, once the mailbox is free */
+        if (!mb[1]) {
+            mb[0] = EV_POWER;
+            mb[1] = 1;
+            st->boot_post = 0;
+        }
+        return;
+    }
+
+    /* How long the main button has been down, whatever else is held: a press
+     * counts at its second sample, if - or + is held then (so pressing both
+     * at once counts, and a press begun long before the modifier doesn't). */
+    if (fresh)
+        st->boot_down = 0;                     /* a press already down at a wake is new */
+    if (!main)
+        st->boot_down = 0;
+    else if (st->boot_down < 255)
+        st->boot_down++;
+
+    mod = BTN_MINUS() && !BTN_PLUS() ? 1 : BTN_PLUS() && !BTN_MINUS() ? 2 : 0;
+    if (STRUCT_BASE[OFF_SCREEN] != 0 || STRUCT_BASE[OFF_SESSION] != 0 || mod == 0) {
+        st->boot_mod = 0;
+        st->boot_presses = 0;
+        return;
+    }
+    if (mod != st->boot_mod) {
+        st->boot_mod = mod;
+        st->boot_presses = 0;
+    }
+    if (st->boot_presses && DEV_SYS_TICK - st->boot_t0 > BOOT_GAP)
+        st->boot_presses = 0;
+    if (st->boot_down != 2)
+        return;
+    st->boot_t0 = DEV_SYS_TICK;
+    if (++st->boot_presses < BOOT_PRESSES)
+        return;
+    ramp_set_stock_mode(mod == 2);
+    st->boot_presses = 0;
+    st->boot_swallow = 1;
+    st->boot_post = 1;
+}
+
 void ramp_event_entry(void)
 {
     volatile u8 *mb = EVENT_MAILBOX;
     volatile ramp_state_t *st = RAMP_STATE;
+
+    /* After the boot gesture: the modifier's events, until it's let go. */
+    if (mb[1] && st->magic == RAMP_MAGIC && st->boot_swallow && mb[0] >= 1 && mb[0] <= 4)
+        mb[1] = 0;
 
     if (ramp_stock_mode()) {   /* every event to stock, untouched */
         orig_event_consumer();

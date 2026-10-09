@@ -65,26 +65,31 @@
 #define DEV_NOTIFY_HANDLE   27
 #define DEV_ID              1
 
-/* Preset picker (ramp_input.c): a hold of - from home opens it, + and - step
- * through the six presets, a double click switches the ramp system on or off,
- * a click leaves it. Events are the stock consumer's codes (decoder
- * 0xbe00-0xc180): 1 = - short, 2 = + short, 3 = - held, 4 = + held, 7..11 =
- * 1..5+ clicks, 13 = main long hold, 14 = any press (posted first).
+/* Preset picker (ramp_input.c): a single click on the idle live view opens it,
+ * + and - step through the six presets, a double click switches the ramp
+ * system on or off, a click leaves it. Events are the stock consumer's codes
+ * (decoder 0xbe00-0xc180): 1 = - short, 2 = + short, 3 = - held, 4 = + held,
+ * 7..11 = 1..5+ clicks, 12 = 4 clicks + hold, 13 = main long hold, 14 = any
+ * press (posted first).
  *
  * Screens (+0x79; the consumer's table pointer 0x1a3c0 is a runtime address,
- * the table is at disassembly 0x1a398): 0 = off / asleep, 1 = live view (the
- * heating screen in a session), 4 / 14 = home, 12 = the "ready" prompt. With
- * +0x82 set (two-step heat, toggled by four clicks) a press on home moves to
- * 12, where + / - short or held do nothing in stock; its countdown (+0x9f/
- * +0xa0) then returns to home (0x7044: screen 4, view 18). With +0x82 clear
- * (one-press heat) a press on home starts a session and + / - on the live
- * view open the edit screens, so no button is free and the picker can't open.
- * Home and the prompt are the only screens where it opens or shows. */
-#define DEV_HOME_SCREEN(s)  ((s) == 4 || (s) == 12 || (s) == 14)
-#define SCREEN_PROMPT       12
-#define OFF_PROMPT_TIMER    0x9f   /* u16 at +0x9f/+0xa0, unaligned: two bytes */
+ * the table is at disassembly 0x1a398): 0 = off / asleep, 1 = the live view
+ * (idle, and the heating screen in a session), 4 / 12 = only while the device
+ * is locked, 5-9 = editors and menus. +0x82 is the device lock -- the 0x99
+ * status packet's "Device Locked" bit (byte 16, 0x10) is built from it
+ * (0x121d0, base 0x84309c + 0xe), and four clicks toggle it.
+ *
+ * Unlocked, on the idle live view (screen 1, no session), stock uses: + / -
+ * short or held (editors, 0x61c8 / 0x610a), double click (start), triple click
+ * (menu, 0x5da2), long hold (preset cycle, 0x61f6), four clicks (lock), four
+ * clicks + hold (low power), five clicks (power). A single click (and the
+ * press event before it) does nothing: 0x5708 -> 0x571e -> 0x5728 -> return.
+ * That click opens the picker. Locked, nothing opens it -- the lock stands. */
+#define OFF_LOCKED          0x82
+#define SCREEN_LIVE         1
+#define DEV_PICKER_SCREEN() (STRUCT_BASE[OFF_SCREEN] == SCREEN_LIVE && STRUCT_BASE[OFF_LOCKED] == 0)
 #define DEV_PICK_COUNT      6
-#define DEV_PICK_ENTER      3
+#define DEV_PICK_ENTER      7      /* single click: a no-op there in stock */
 #define DEV_PICK_NEXT       2
 #define DEV_PICK_PREV       1
 #define DEV_PICK_EXIT       7

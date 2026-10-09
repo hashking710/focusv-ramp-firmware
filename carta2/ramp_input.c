@@ -23,16 +23,16 @@
  * Up/down are consumed rather than passed on, so the stock edit screen -- which
  * would rewrite the active preset slot mid-ramp -- can't be entered.
  *
- * Preset picker (ramp_picker.c), when no ramp is running: a hold of - on home
- * or the "ready" prompt opens it (see DEV_HOME_SCREEN in device.h: with
- * two-step heat set, the press itself moves home to the prompt, where stock
- * ignores + and -); + / - step through the presets, a double click switches the
- * ramp system on or off, a click leaves. Events it takes reach the stock
- * consumer as 1 (- short), which home and the prompt ignore, so the consumer's
- * prelude still counts them as activity (keep-awake +0x57 / +0x58, auto-off
- * +0xb0 / +0xb4). It's drawn from here on every change and from the 0xce70 hook
- * whenever stock redraws home. Leaving it does what a stock click on the
- * prompt does (countdown 1): stock returns to home and redraws all of it.
+ * Preset picker (ramp_picker.c), when no ramp is running: a single click on
+ * the idle live view, with the device unlocked, opens it (see
+ * DEV_PICKER_SCREEN in device.h -- the only button stock leaves unused there);
+ * + / - step through the presets, a double click switches the ramp system on
+ * or off, a click leaves. Events it takes reach the stock consumer as 6, which
+ * the live view ignores (0x5bf6), so the consumer's prelude still counts them
+ * as activity (keep-awake +0x57 / +0x58, auto-off +0xb0 / +0xb4). It's drawn
+ * from here on every change and from the 0xce70 hook whenever stock redraws
+ * the live view. Leaving redraws the live view the way stock does (clear, then
+ * 0xfa1c).
  */
 #include "ramp.h"
 
@@ -47,17 +47,19 @@
  * posted on every press of any button, is taken like the click it precedes. */
 #define EV_POWER        11
 #define EV_SYSTEM_MIN   16
-#define EV_NOOP         1
+#define EV_NOOP         6
 
-/* Back to stock home: exactly what a click on the prompt does (0x587a). The
- * countdown expires on the next tick and 0x7044 sets screen 4 and redraws
- * view 18 in full, picker box included. */
+typedef void (*clear_fn)(unsigned int y, unsigned int h, unsigned int color);
+#define stock_clear      STOCK_FN(clear_fn, 0x7734)
+#define stock_live_view  STOCK_FN(void_fn, 0xfa1c)
+
+/* Back to the stock live view, exactly as stock draws it (0x5aa4: clear the
+ * whole screen, then 0xfa1c). */
 static void home_redraw(void)
 {
-    if (DEV_HOME_SCREEN(STRUCT_BASE[OFF_SCREEN])) {
-        STRUCT_BASE[OFF_SCREEN] = SCREEN_PROMPT;
-        STRUCT_BASE[OFF_PROMPT_TIMER] = 1;
-        STRUCT_BASE[OFF_PROMPT_TIMER + 1] = 0;
+    if (DEV_PICKER_SCREEN() && STRUCT_BASE[OFF_SESSION] == 0) {
+        stock_clear(0, 239, 0);
+        stock_live_view();
     }
 }
 
@@ -89,7 +91,7 @@ void ramp_event_entry(void)
 
     if (mb[1]) {
         u8 ev = mb[0];
-        u8 idle = DEV_HOME_SCREEN(STRUCT_BASE[OFF_SCREEN]) && STRUCT_BASE[OFF_SESSION] == 0 &&
+        u8 idle = DEV_PICKER_SCREEN() && STRUCT_BASE[OFF_SESSION] == 0 &&
                   ev != EV_POWER && ev < EV_SYSTEM_MIN;
         u8 was_on = st->picker_on;
         if (ramp_picker_event(st, ev, idle, DEV_PICK_ENTER, DEV_PICK_NEXT,

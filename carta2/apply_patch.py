@@ -54,14 +54,14 @@ WAYPOINT_SECTOR = 0x32000
 IMAGE_END_ADDR = 0x33000
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_carta2_v1.bin"   # built locally, never published
-BLOB_SHA256 = "cc2feee796c53b777476cc4d129dfaa0dee17646069d6ee16d6555f433912e6a"   # written by tools/build.py
+BLOB_SHA256 = "b7acfa27c5c73a88554add114a5f784e6b4c0dc2cb62d281362e8ce1265ccdd8"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock
 # instruction; each replacement is the real assembler's `tjl` to the named
 # function in the blob above.
 PATCHES = [
-    (0x6D0C, bytes.fromhex("fe97849c"), bytes.fromhex("2a90509d")),  # tjl 0x5618 -> ramp_event_entry
+    (0x6D0C, bytes.fromhex("fe97849c"), bytes.fromhex("2a905c9d")),  # tjl 0x5618 -> ramp_event_entry
     (0x6E2E, bytes.fromhex("04907d98"), bytes.fromhex("29908899")),  # tjl 0xaf2c -> ramp_trampoline
     (0xE706, bytes.fromhex("fe97b39b"), bytes.fromhex("2290cb9f")),  # tjl 0xce70 -> ramp_ce70_hide
     (0xE70A, bytes.fromhex("fe97259c"), bytes.fromhex("2290eb9f")),  # tjl 0xcf58 -> ramp_cf58_hide
@@ -93,7 +93,7 @@ PATCHES = [
     (0xFA58, bytes.fromhex("fe97529c"), bytes.fromhex("2190749e")),  # tjl 0xe300 -> ramp_e300_hide
     (0xFA60, bytes.fromhex("fe97289c"), bytes.fromhex("21907c9e")),  # tjl 0xe2b4 -> ramp_e2b4_hide
     (0x11562, bytes.fromhex("0490679a"), bytes.fromhex("1f90819a")),  # tjl 0x15a34 -> ramp_announce_entry
-    (0x11D96, bytes.fromhex("28a3eb1c"), bytes.fromhex("1f90979d")),  # tmovs r3, #40 -> ramp_marker_entry
+    (0x11D96, bytes.fromhex("28a3eb1c"), bytes.fromhex("1f90a39d")),  # tmovs r3, #40 -> ramp_marker_entry
 ]
 
 

@@ -80,37 +80,37 @@ Outside a ramp, every event goes to the stock consumer unchanged.
 
 ## Preset picker and on/off
 
-With no session, from home, **hold −** to open the picker. A box over the stock target line shows
-the selected preset's number and a row of six markers. Inside it:
+With no session and the device unlocked, **single-click** on the idle live view to open the picker.
+A box over the stock target line shows the selected preset's number and a row of six markers.
+Inside it:
 
 - **+ / −**: next / previous built-in preset;
 - **double click**: switch the ramp system on or off -- with it off, the number and the selected
   marker turn orange;
-- **click**: leave, saving the choice in flash. Stock home is redrawn.
+- **click**: leave, saving the choice in flash. The stock live view is redrawn.
 
-**Where it opens.** The Carta 2 has two stock heat modes, switched by four clicks (`+0x82`):
+**Why a single click.** On the unlocked idle live view (screen 1), stock already uses every other
+gesture: + / − short or held open the temperature / time editors, a double click starts a session,
+a triple click opens a menu, a long hold cycles the presets, four clicks lock the device, four
+clicks + hold toggle low power, five clicks power off. A single click does nothing there
+(`0x5708` -> `0x571e` -> `0x5728` -> return), so it's the one gesture the picker can take without
+shadowing a stock one.
 
-- **two-step heat** (`+0x82` set): a press on home (screen 4) shows the "ready" prompt (screen 12),
-  where a double click heats and + / − do nothing in stock. Holding − from home therefore lands on
-  the prompt and opens the picker. This is the only mode it works in.
-- **one-press heat** (`+0x82` clear): any press on home starts a session, and + / − on the live view
-  open the stock edit screens, so every button already has a stock meaning and the picker never
-  opens. Four clicks switch to two-step heat.
+**Device lock.** Four clicks lock the Carta 2 (`+0x82`; the official app reads it as "Device
+Locked", byte 16 of the `0x99` status packet). While it's locked, the picker doesn't open.
 
 Screens, from the stock consumer's table (pointer `0x1a3c0` is a runtime address; the table is at
-disassembly `0x1a398`): 0 off / asleep, 1 live view (heating screen in a session), 4 / 14 home,
-5 / 6 edit, 7-9 menus, 12 the prompt. An earlier version treated screen 0 as idle -- from that table
-read 0x28 bytes late -- so its picker could only open while the screen was off, where it was
-invisible.
+disassembly `0x1a398`): 0 off / asleep, 1 the live view (idle, and the heating screen in a session),
+4 / 12 only while locked, 5-9 editors and menus. Two earlier versions got this wrong: one treated
+screen 0 as idle (from that table read 0x28 bytes late), so the picker could only open while the
+screen was off; the next opened it from the lock screens, so it only worked while locked.
 
-The box is redrawn on every change, from the event hook, and again whenever stock redraws home.
-Events the picker takes reach the stock consumer as a short −, which home and the prompt ignore,
-so they still count as activity for auto-off. Leaving (or the 30 s timeout) does what a stock click
-on the prompt does -- its countdown is set to 1 -- and stock returns to home and redraws all of it.
-The picker opens even when the system is off, so it can be switched back on; while off, no ramp
-arms and no stage or offset is saved. It closes, passing the event on, as soon as the screen leaves
-home and the prompt. Five clicks (power on / off) and the app's start / stop / +10 s always reach
-the stock code.
+The box is redrawn on every change, from the event hook, and again whenever stock redraws the live
+view. Events the picker takes reach the stock consumer as one the live view ignores, so they still
+count as activity for auto-off. The picker opens even when the ramp system is off, so it can be
+switched back on; while off, no ramp arms and no stage or offset is saved. It closes, passing the
+event on, as soon as the screen leaves the idle live view. Five clicks (power on / off) and the
+app's start / stop / +10 s always reach the stock code.
 
 The earlier on/off gesture, + and − held together, is gone: it counted any − press followed by any +
 press, so stepping through presets could switch the system off.

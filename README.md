@@ -26,7 +26,7 @@ by, or sponsored by Focus V.
   concentrate), each a temperature plus a hold time, stored in their own flash sector. The device
   also ships six built-in concentrate ramps (the same profiles as Terpline's presets).
 - **Choosing a built-in ramp, and on/off, on the device.** A hold from idle opens a picker (Carta 2:
-  hold − from home, in its two-step heat mode; Aeris and Sport: a single-press hold, LEDs on). Carta 2: + / − step through six presets, double click switches the ramp system on or off,
+  a single click on the idle screen, unlocked; Aeris and Sport: a single-press hold, LEDs on). Carta 2: + / − step through six presets, double click switches the ramp system on or off,
   click leaves. Aeris and Sport: single clicks step through four presets, shown in colour on the
   button light and the LEDs, triple click switches on or off, hold leaves. During a ramp the button
   light shows the temperature colour. The choice and the on/off state are kept in flash. Outside the

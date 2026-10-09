@@ -553,6 +553,30 @@ static void t_stock_mode(void)
     CHECK(!ramp_stock_mode() && flash[RAMP_MODE_OFFSET] == 0xff, "switched mid-ramp");
 }
 
+static void t_rank_change(void)
+{
+    int i;
+    printf("another app selects a different preset mid-ramp: a plain stock session of that preset\n");
+    reset_device(0);
+    tick();
+    set16(sim_struct, (2 + TBL_CO_F) * 2, 480);
+    set16(sim_struct, (2 + TBL_CO_C) * 2, 248);
+    set16(sim_struct, (2 + TBL_CO_HOLD) * 2, 40);
+    start_session(1, 150, 65, 30);
+    for (i = 0; i < 60 * TPS; i++) tick();
+    CHECK(ramp_active(ST()), "ramp not running");
+    sim_struct[0x08] = 2;                         /* the 0xCC packet's rank byte */
+    tick();
+    CHECK(ST()->stage == 0, "still ramping on the old slot");
+    CHECK(u16at(sim_struct, TBL_CO_F * 2) == 150, "trigger slot not restored: %d", u16at(sim_struct, TBL_CO_F * 2));
+    CHECK(u16at(sim_struct, OFF_COUNTDOWN) == 40, "countdown %d, not the new preset's hold", u16at(sim_struct, OFF_COUNTDOWN));
+    for (i = 0; i < 5 * TPS; i++) tick();
+    CHECK(ST()->stage == 0 && sim_struct[OFF_SESSION] == 1, "re-armed or stopped");
+    for (i = 0; i < 200 * TPS && sim_struct[OFF_SESSION]; i++) tick();
+    CHECK(!sim_struct[OFF_SESSION] && u16at(sim_dab, 2) == 1 && slot_f() == 480,
+          "the session should end the stock way at preset 2: session %d dabs %d", sim_struct[OFF_SESSION], u16at(sim_dab, 2));
+}
+
 static void t_foreign_sector(void)
 {
     struct run r;
@@ -632,6 +656,7 @@ int main(void)
     t_app_request();
     t_stock_mode();
     t_foreign_sector();
+    t_rank_change();
     t_picker_timeout();
     t_flash_writes();
     CHECK(write_too_long == 0, "%d flash writes longer than DEV_FLASH_WRITE_MAX", write_too_long);

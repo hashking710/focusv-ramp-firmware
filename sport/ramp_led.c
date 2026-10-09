@@ -19,7 +19,7 @@
  *           it scaled by the animation level 0x844b3d (/100).
  * Every stock push (the dispatcher's tail, the power-on and BLE animations)
  * runs: button push, PA0 high (the LED rail, cleared only on the way to
- * sleep), ring push -- so the next push is always a main-loop tick (10 ms)
+ * sleep), ring push -- so the next push is always a dispatcher pass (20 ms)
  * away and never cuts a ring transfer short. This file does exactly the same,
  * from one place: the dispatcher's call site.
  *
@@ -122,7 +122,7 @@ void ramp_led_tick(void)
 }
 
 /* Installed at 0x57ee, the only call of the stock LED effect dispatcher 0x8ff8
- * (main loop, every 10 ms tick). While a ramp or the picker owns the lights,
+ * (every other 10 ms main-loop pass: 50 Hz). While a ramp or the picker owns the lights,
  * fill both and push them the way the dispatcher's own tail does; otherwise
  * -- LEDs switched off, a stock cue playing, nothing to show -- run the
  * dispatcher unchanged, which also puts the stock colours back. The buffers

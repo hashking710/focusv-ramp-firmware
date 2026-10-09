@@ -293,10 +293,20 @@ static void ramp_tick(void)
     }
     hold_save(st);
 
-    /* atomizer swapped mid-ramp: hand the session back to stock */
-    if ((DEV_MODE_IS_CONC() ? 1 : 0) != st->bank) {
-        disarm(st);
-        return;
+    /* Something outside the patch moved the session to another preset: the
+     * atomizer (mode), or an app selecting another rank (every 0xCC packet
+     * sets both ranks). Hand it back to stock as a plain session of that
+     * preset: the ramp's slot restored, the countdown that preset's own hold
+     * (what stock loads at a session start), and no re-arming this session. */
+    {
+        u8 conc = DEV_MODE_IS_CONC() ? 1 : 0;
+        if (conc != st->bank || DEV_RANK(conc) != st->rank) {
+            disarm(st);
+            st->arm_failed = 1;
+            if (DEV_RANK(conc) <= RAMP_MAX_RANK)
+                FIELD16(OFF_COUNTDOWN) = *PRESET(conc ? TBL_CO_HOLD : TBL_FL_HOLD, DEV_RANK(conc));
+            return;
+        }
     }
 
     /* The ramp owns the countdown while it runs. Between two ticks the stock

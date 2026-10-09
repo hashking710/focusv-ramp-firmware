@@ -226,6 +226,7 @@ static void disarm(volatile ramp_state_t *st)
     st->stage = 0;
     st->counted = 0;
     ramp_announce_queue(st);   /* ... and that it ended */
+    DEV_RAMP_ENDED();
 }
 
 /* ---- per tick ----------------------------------------------------------- */

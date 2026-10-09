@@ -142,6 +142,11 @@
 #define DEV_PICK_TOGGLE     8      /* double click: ramp system on / off */
 void ramp_picker_closed_redraw(void);
 #define DEV_PICKER_CLOSED() ramp_picker_closed_redraw()
+/* A ramp ended: stock's stop (0x97f0) repaints only some views (8, 0, 11, 9,
+ * 15 through 0xf338), and the ramp screen covers the chart area, the bottom
+ * row and the header -- repaint the whole live view if it's showing. */
+void ramp_screen_restore(void);
+#define DEV_RAMP_ENDED()    ramp_screen_restore()
 
 /* The screen draws from its own hooks; after each tick, the boot gesture. */
 void ramp_boot_tick(void);

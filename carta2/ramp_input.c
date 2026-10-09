@@ -84,6 +84,16 @@ void ramp_picker_closed_redraw(void)
     home_redraw();
 }
 
+/* A ramp ended (ramp_core.c disarm): the full stock live view, if it's what's
+ * showing -- off, or another screen, repaints on its own transition. */
+void ramp_screen_restore(void)
+{
+    if (STRUCT_BASE[OFF_SCREEN] == SCREEN_LIVE) {   /* locked or not, session or not */
+        stock_clear(0, 239, 0);
+        stock_live_view();
+    }
+}
+
 /* ---- boot gesture ------------------------------------------------------------
  * Off (screen 0), holding - or + while pressing the main button five times
  * powers the device on in ramp mode (-: Terpline) or stock mode (+: Focus V),

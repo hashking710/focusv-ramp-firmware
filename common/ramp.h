@@ -353,6 +353,11 @@ void ramp_picker_close(volatile ramp_state_t *st);
 #ifndef DEV_ARM_BLOCKED
 #define DEV_ARM_BLOCKED()    0
 #endif
+/* Called when a ramp ends (after the slot is restored). The Carta 2 repaints
+ * its live view: the ramp screen covers areas stock's incremental views don't. */
+#ifndef DEV_RAMP_ENDED
+#define DEV_RAMP_ENDED()  ((void)0)
+#endif
 #ifndef DEV_PICKER_CLOSED
 #define DEV_PICKER_CLOSED()  ((void)0)   /* Carta 2: redraw the stock idle screen */
 #endif

@@ -105,6 +105,17 @@ static void s_lcd_data(u8 b)
     if (++cur_x > win_x1) { cur_x = win_x0; cur_y++; }
 }
 
+/* stock clear (0x7734: rows y0..y1 in a colour) and the full live view (0xfa1c) */
+static int live_views;
+static void s_clear(unsigned int y0, unsigned int y1, unsigned int c)
+{
+    unsigned int x, y;
+    for (y = y0; y <= y1 && y < H; y++)
+        for (x = 0; x < W; x++)
+            fb[y][x] = (unsigned short)c;
+}
+static void s_live_view(void) { live_views++; }
+
 static void s_noop(void) {}
 static short s_div(int a, int b) { return (short)(a / b); }
 static void s_flash_read(int addr, int len, void *buf) { memcpy(buf, flash_store + (addr - DEV_RAMP_FLASH), len); }
@@ -145,6 +156,8 @@ void *sim_fn(unsigned int a)
     case 0x74d0: return (void *)s_fill;
     case 0x7e2c: return (void *)s_blit;
     case 0x7a24: return (void *)s_batt_anim;
+    case 0x7734: return (void *)s_clear;
+    case 0xfa1c: return (void *)s_live_view;
     case 0x7464: return (void *)s_lcd_window;
     case 0x0c60: return (void *)s_lcd_cmd;
     case 0x0ca8: return (void *)s_lcd_data;
@@ -244,6 +257,9 @@ int main(int argc, char **argv)
         }
     }
     CHECK(drawn == 2, "ramp never reached stage 3 on screen");
+    tick();                                          /* the session ended: the ramp disarms */
+    CHECK(!ramp_active(st) && live_views == 1 && lit_in(0, 0, 239, 239) == 0,
+          "the ramp screen wasn't replaced by stock's full live view (views %d, lit %d)", live_views, lit_in(0, 0, 239, 239));
     CHECK(prims > 100, "only %d draw calls", prims);
     CHECK(oob == 0, "%d draws outside the 240x240 screen", oob);
     CHECK(lcd_bad == 0, "%d malformed LCD writes (outside the window, half a pixel, or short)", lcd_bad);

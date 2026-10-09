@@ -68,5 +68,7 @@ extern int sim_picker_closed;
 #endif
 
 #define DEV_AFTER_TICK(st)  ((void)0)
+extern int sim_clock_waits;
+#define DEV_CLOCK_WAITS_FOR_REACHED  (sim_clock_waits)
 
 #endif

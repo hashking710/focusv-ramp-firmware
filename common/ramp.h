@@ -159,6 +159,14 @@ static inline u8 ramp_enabled(void)
  * misread, an atomizer that can't get there -- the hold starts counting anyway
  * after this many seconds of heating, so a ramp can't stall. */
 #define RAMP_MAX_HEAT_S      120
+/* On Aeris and Sport (device.h sets this) the stock session clock only runs
+ * while "reached" is set, so a stage that never gets there never ticks at
+ * all: the ramp times heat-up itself, on the system tick, and runs the clock
+ * past the cap. */
+#ifndef DEV_CLOCK_WAITS_FOR_REACHED
+#define DEV_CLOCK_WAITS_FOR_REACHED  0
+#endif
+#define RAMP_SYS_TICKS_PER_S (16u * 1000u * 1000u)
 u8  ramp_selected(void);
 int ramp_offset(void);
 void ramp_store_set(u8 off, u8 v);
@@ -211,6 +219,7 @@ typedef struct {
     u8  picker_enabled; /* the ramp system's on/off, cached while the picker shows */
     u32 picker_t0;    /* system tick of the picker's last event (timeout) */
     u16 heat_s;       /* seconds this stage has spent heating, not at temperature */
+    u32 heat_t0;      /* Aeris/Sport: system tick heat_s was last advanced at */
     u16 ann_tries;    /* announcement send attempts left (ramp_announce.c) */
     u8  ann_enabled;  /* the announcement's fields, captured when it's queued */
     u8  ann_preset;

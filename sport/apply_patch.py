@@ -58,18 +58,18 @@ IMAGE_END_ADDR = 0x1B000
 OTA_MAX_IMAGE = 124 << 10
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_sport_v1.bin"   # built locally, never published
-BLOB_SHA256 = "7e6ee8c3a507b3f4b19bc9b600f463869b35b37f3d4f7a5b664a0a76858172f1"   # written by tools/build.py
+BLOB_SHA256 = "44ce36a3570fbe8a2979e3632ec5a9daa48c6db6c54b6672e0e586fe2a002d6d"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock
 # instruction; each replacement is the real assembler's `tjl` to the named
 # function in the blob above.
 PATCHES = [
-    (0x57EE, bytes.fromhex("0390039c"), bytes.fromhex("1390cd99")),  # tjl 0x8ff8 -> ramp_led_entry
-    (0x58A8, bytes.fromhex("fe97909e"), bytes.fromhex("1390d09a")),  # tjl 0x45cc -> ramp_event_entry
-    (0x58B0, bytes.fromhex("0290a699"), bytes.fromhex("1290419c")),  # tjl 0x7c00 -> ramp_trampoline
-    (0xA9EA, bytes.fromhex("04902799"), bytes.fromhex("0e903998")),  # tjl 0xec3c -> ramp_announce_entry
-    (0xB002, bytes.fromhex("35a3fb1c"), bytes.fromhex("0d907f9f")),  # tmovs r3, #53 -> ramp_marker_entry
+    (0x57EE, bytes.fromhex("0390039c"), bytes.fromhex("1390f399")),  # tjl 0x8ff8 -> ramp_led_entry
+    (0x58A8, bytes.fromhex("fe97909e"), bytes.fromhex("1390f69a")),  # tjl 0x45cc -> ramp_event_entry
+    (0x58B0, bytes.fromhex("0290a699"), bytes.fromhex("1290439c")),  # tjl 0x7c00 -> ramp_trampoline
+    (0xA9EA, bytes.fromhex("04902799"), bytes.fromhex("0e905d98")),  # tjl 0xec3c -> ramp_announce_entry
+    (0xB002, bytes.fromhex("35a3fb1c"), bytes.fromhex("0d90a59f")),  # tmovs r3, #53 -> ramp_marker_entry
 ]
 
 

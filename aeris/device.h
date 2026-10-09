@@ -118,6 +118,9 @@
  * runs until a press stops it. A sentinel slot must not turn it into a ramp --
  * it would take over the countdown, end it and could count it as a dab. */
 #define DEV_ARM_BLOCKED()   ((*(volatile u8 *)DEV_UI_STATE_ADDR) == 7)
+/* The session timer decrements the countdown only once "reached" (+0x1) is
+ * set -- see the header comment. */
+#define DEV_CLOCK_WAITS_FOR_REACHED  1
 
 
 void ramp_led_tick(void);

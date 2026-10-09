@@ -21,6 +21,7 @@ static void apply_stage(volatile ramp_state_t *st, u8 stage)
     STRUCT_BASE[OFF_REACHED] = 0;   /* stock re-targets from the slot */
     st->stage = stage;
     st->heat_s = 0;
+    st->heat_t0 = DEV_SYS_TICK;
 }
 
 /* ---- dab counting --------------------------------------------------------
@@ -232,6 +233,20 @@ static void ramp_tick(void)
      * reloading it from the slot's hold time (session start paths, BLE
      * handlers, first reach on Aeris/Sport, the Sport's +10 s) -- up or down.
      * Undo it, so the slot's hold never has to hold the ramp's length. */
+    /* Aeris / Sport: their stock clock waits for "reached", so no heating
+     * second ever reaches the code below. Time heat-up here instead, and past
+     * the cap run the clock -- one second each second, never below 1: a
+     * single stage then waits at 1 for the stock completion, exactly as a
+     * stock session that can't reach its target would. */
+    if (DEV_CLOCK_WAITS_FOR_REACHED && !STRUCT_BASE[OFF_REACHED] &&
+        DEV_SYS_TICK - st->heat_t0 >= RAMP_SYS_TICKS_PER_S) {
+        st->heat_t0 += RAMP_SYS_TICKS_PER_S;
+        if (st->heat_s < RAMP_MAX_HEAT_S)
+            st->heat_s++;
+        else if (FIELD16(OFF_COUNTDOWN) == st->last_left && st->last_left > 1)
+            FIELD16(OFF_COUNTDOWN) = (u16)(st->last_left - 1);
+    }
+
     t = FIELD16(OFF_COUNTDOWN);
     if (t != st->last_left && t + 1 != st->last_left)
         FIELD16(OFF_COUNTDOWN) = t = st->last_left;

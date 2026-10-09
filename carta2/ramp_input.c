@@ -7,10 +7,16 @@
  * 8 = double click (stock: +10 s).
  *
  * While a ramp is active (everything else is stock):
- *   single click -> stop. Screen is forced to 5 (the live heating screen). Its
- *                   stock handler at 0x5954 runs the stop routine 0x97f0 on
- *                   event 7 and returns to idle. Screen 1, used before, is a
- *                   plain return in the consumer's table: it never stopped.
+ *   single click -> stop. Screen is forced to 1, the heating screen every
+ *                   stock session start sets (0x5a9e and the other starts):
+ *                   its handler 0x5708 runs the stop routine 0x97f0 on event
+ *                   7 or 17 while +0x1 (session) is 1. The consumer's screen
+ *                   table pointer 0x1a3c0 is a runtime address -- the table
+ *                   is at disassembly 0x1a398 (entries 4 and 14 both point
+ *                   at 0x5740, which tests for exactly those two screens).
+ *                   Read 0x28 bytes late it looks as if screen 5 stops and
+ *                   screen 1 returns; screen 5 is really the edit screen
+ *                   (0x57aa), where a click doesn't stop anything.
  *   + / - short  -> next / previous stage
  *   + / - held   -> ignored (auto-repeat would skip every stage)
  *   double click -> ignored (stock +10 s would rewind the ramp clock)
@@ -28,7 +34,14 @@
 #define EVENT_MAILBOX        ((volatile u8 *)0x84319c)
 #define orig_event_consumer  STOCK_FN(void_fn, 0x5618)
 
-#define SCREEN_HEATING 5
+#define SCREEN_HEATING 1
+
+/* Events the picker never takes: 11 is power on / off (five clicks, and the
+ * firmware's own request at 0xfee8); 16 / 17 / 18 are the app's A5 / AF / 66
+ * markers (0x125f2, 0x125e6, 0x12726), and 19+ are other system events. 14,
+ * posted on every press of any button, is taken like the click it precedes. */
+#define EV_POWER        11
+#define EV_SYSTEM_MIN   16
 
 typedef void (*draw_screen_fn)(unsigned int screen);
 #define stock_draw_screen STOCK_FN(draw_screen_fn, 0xf338)
@@ -61,7 +74,9 @@ void ramp_event_entry(void)
     }
 
     if (mb[1]) {
-        u8 idle = STRUCT_BASE[OFF_SCREEN] == 0 && STRUCT_BASE[OFF_SESSION] == 0;
+        u8 ev = mb[0];
+        u8 idle = STRUCT_BASE[OFF_SCREEN] == 0 && STRUCT_BASE[OFF_SESSION] == 0 &&
+                  ev != EV_POWER && ev < EV_SYSTEM_MIN;
         u8 was_on = st->picker_on;
         if (ramp_picker_event(st, mb[0], idle, DEV_PICK_ENTER, DEV_PICK_NEXT,
                               DEV_PICK_PREV, DEV_PICK_EXIT, DEV_PICK_TOGGLE)) {

@@ -176,7 +176,7 @@ int main(int argc, char **argv)
     /* concentrate session at the sentinel, F scale, 68 % battery */
     S(0x07) = 1; S(0x09) = 1; S(0x0b) = 0;
     S16(DEV_PRESET_OFF(TBL_CO_F, 0)) = 150; S16(DEV_PRESET_OFF(TBL_CO_C, 0)) = 65; S16(DEV_PRESET_OFF(TBL_CO_HOLD, 0)) = 30;
-    S16(OFF_COUNTDOWN) = 30; S16(OFF_MEAS_F) = 77; S(OFF_REACHED) = 0; S(OFF_SCREEN) = 5;
+    S16(OFF_COUNTDOWN) = 30; S16(OFF_MEAS_F) = 77; S(OFF_REACHED) = 0; S(OFF_SCREEN) = 1;
     *(volatile u8 *)(0x84309c + 0x14) = 68;
     S(OFF_SESSION) = 1;
 

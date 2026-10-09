@@ -70,6 +70,8 @@ draw (w+1) x (h+1) pixels, opaquely.
 The patch hooks the only call to the stock button-event consumer (0x5618):
 
 - **main button, single click:** stop, at any stage, through the stock heating screen's own stop path
+  (screen 1, handler `0x5708` -> `0x97f0`). An earlier version forced screen 5 instead -- from a
+  screen table read 0x28 bytes late -- which is the edit screen, so a click didn't stop the ramp.
 - **+ / − short press:** next / previous stage
 - **+ / − held, double click:** ignored. Auto-repeat would skip every stage, and the stock +10 s
   would rewind the ramp clock.
@@ -89,8 +91,19 @@ line shows the selected preset's number and a row of six markers. Inside it:
 The box is redrawn on every change, from the event hook, and again whenever stock redraws the idle
 screen. The picker opens even when the system is off, so it can be switched back on; while off, no
 ramp arms and no stage or offset is saved. It closes, passing the event on, as soon as the screen
-leaves idle. A held − on the idle screen does nothing in stock (screen 0's handler only acts on a
-click), so it doesn't shadow a stock gesture.
+leaves idle. Five clicks (power on / off) and the app's start / stop / +10 s always reach the stock
+code.
+
+> [!WARNING]
+> **Known issue -- the picker's entry point needs a Carta 2 pass.** The picker treats screen 0 as
+> idle, but in the stock consumer's screen table (pointer `0x1a3c0`, a runtime address: the table is
+> at disassembly `0x1a398`) screen 0 is the off / sleep state -- it only handles five clicks (power
+> on), the press event and two system events. The home screen is 4 / 14, and depending on a saved
+> setting (`+0x82`) a press there either starts a session at once or moves to menu screen 12, so a
+> held − never arrives on home either. As built, the picker can only open while the screen is off,
+> where it's invisible. It can't block power-on (five clicks always pass), but it doesn't work as
+> described above until it's redesigned against the home and menu screens, ideally with the Carta 2
+> open in Ghidra and on hardware.
 
 The earlier on/off gesture, + and − held together, is gone: it counted any − press followed by any +
 press, so stepping through presets could switch the system off.

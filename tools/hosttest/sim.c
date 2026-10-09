@@ -32,6 +32,7 @@ int sim_picker_closed;
 static unsigned char flash[0x1000];
 static int erases, never_reach;
 static int carta_timing;     /* 1: countdown runs through heat-up (Carta 2) */
+int sim_clock_waits;         /* !carta_timing, as the device.h macro sees it */
 static int tick_no;
 static int notify_busy;      /* sim_notify refuses this many packets first */
 static unsigned char last_pkt[32];
@@ -105,6 +106,7 @@ static void reset_device(int carta)
     memset(sim_state, 0xa7, sizeof sim_state);      /* power-on garbage */
     memset(flash, 0xff, sizeof flash);
     carta_timing = carta;
+    sim_clock_waits = !carta;
     sim_struct[0x04] = 0;   /* F scale */
     tick_no = 0;
     notify_busy = 0; notify_ok = 0; last_len = 0;
@@ -372,6 +374,22 @@ static void t_heat_cap(void)
     printf("  ended at %ds\n", r.ended_at);
 }
 
+static void t_heat_cap_waits(void)
+{
+    struct run r;
+    printf("Aeris/Sport clock, a stage that never reports reached: the ramp runs the clock past the cap\n");
+    reset_device(0);
+    never_reach = 1;
+    tick();
+    start_session(1, 150, 65, 30);
+    r = run_to_end(1200);
+    CHECK(r.stages_seen == 4, "stalled at %d stages", r.stages_seen);
+    CHECK(r.ended_at > 0, "never ended");
+    CHECK(r.stage_at[2] - r.stage_at[1] >= RAMP_MAX_HEAT_S + 30 - 1, "stage 1 lasted only %d s", r.stage_at[2] - r.stage_at[1]);
+    CHECK(u16at(sim_dab, 2) == 0, "counted a dab with no time at temperature");
+    printf("  ended at %ds\n", r.ended_at);
+}
+
 static void t_picker_timeout(void)
 {
     volatile ramp_state_t *st;
@@ -428,6 +446,7 @@ int main(void)
     t_announce();
     t_garbage_ram();
     t_heat_cap();
+    t_heat_cap_waits();
     t_picker_timeout();
     t_flash_writes();
     printf(fails ? "\n%d FAILED\n" : "\nALL HOST TESTS PASSED\n", fails);

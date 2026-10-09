@@ -60,7 +60,7 @@
 #define DEV_STOP            0x6a98
 #define DEV_ROM_DIV         0x1529c
 
-#define DEV_RAMP_FLASH      0x19000   /* code gets 0x18000-0x18fff */
+#define DEV_RAMP_FLASH      0x1a000   /* code gets 0x18000-0x19fff */
 #define DEV_FLASH_READ      0xc0cc
 #define DEV_FLASH_ERASE     0xc178
 #define DEV_FLASH_WRITE     0xc0e8
@@ -118,11 +118,11 @@
  * (the power-on transition); the picker honours the same gate. */
 #define DEV_EV_IGNORED()    ((*(volatile u8 *)(0x842694 + 8)) != 0 && (*(volatile u8 *)(0x842694 + 10)) == 1)
 #define DEV_IDLE()          ((*(volatile u8 *)DEV_UI_STATE_ADDR) == 1 && STRUCT_BASE[OFF_SESSION] == 0)
-/* UI state 7 is the cleaning cycle (two presses + a long hold from sleep,
- * consumer 0x4778 -> session start 0x6c30): the orchestrator forces its own
- * 90 C / 193 F target and the first reach zeroes the countdown. A sentinel
- * slot must not turn it into a ramp -- it would take over the countdown, end
- * the cycle early and could count it as a dab. */
+/* UI state 7 is quick heat (two presses + a long hold from sleep, consumer
+ * 0x4778 -> session start 0x6c30): the orchestrator forces its own 90 C /
+ * 193 F target, the first reach zeroes the countdown, and it runs until a
+ * press stops it. A sentinel slot must not turn it into a ramp -- it would
+ * take over the countdown, end it and could count it as a dab. */
 #define DEV_ARM_BLOCKED()   ((*(volatile u8 *)DEV_UI_STATE_ADDR) == 7)
 
 

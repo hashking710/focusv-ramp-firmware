@@ -53,12 +53,12 @@ LENGTH_FIELD_OFFSET = 24
 # calls bls_ota_set_fwSize_and_fwBootAddr(124, 0x20000); the OTA start rejects
 # a larger header length), so the image must stay under OTA_MAX_IMAGE.
 CODE_INJECT_ADDR = 0x18000
-WAYPOINT_SECTOR = 0x19000
-IMAGE_END_ADDR = 0x1A000
+WAYPOINT_SECTOR = 0x1A000
+IMAGE_END_ADDR = 0x1B000
 OTA_MAX_IMAGE = 124 << 10
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_sport_v1.bin"   # built locally, never published
-BLOB_SHA256 = "f0c9cfc3b8bdc3d49ae236e56627acaf4ebcfde5d303eaeb88296c6e567de92f"   # written by tools/build.py
+BLOB_SHA256 = "7e6ee8c3a507b3f4b19bc9b600f463869b35b37f3d4f7a5b664a0a76858172f1"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock

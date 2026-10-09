@@ -1,32 +1,78 @@
-/* ramp_led.c -- Aeris ramp progress on its 4 RGB LEDs.
+/* ramp_led.c -- Aeris ramp progress on its 4 RGB LEDs and the button light.
  *
  * While a ramp runs: the number of lit LEDs is progress through the ramp
  * (1..4), and their colour is the measured temperature on a five-stop
  * blue -> violet -> magenta -> orange -> gold scale spanning this ramp's own
- * coolest-to-hottest stage, so every stage reads as a distinct colour.
+ * coolest-to-hottest stage, so every stage reads as a distinct colour. The
+ * control button's light shows the same colour.
  *
- * Stock push routine FUN_000090bc (decompiled): drives the LEDs only when
- * device+0xe != 0 -- that byte is the user's LED preset (the triple-click cycle,
- * 0 = LEDs off) -- and dims the buffer in place in low-power / low-battery mode.
- * This file reads that setting and never writes it: with LEDs switched off,
- * nothing is shown. (An earlier version forced it to 1 every tick, overriding
- * the user's LED preset and turning switched-off LEDs back on.)
+ * Stock ring push FUN_000090bc (decompiled): drives the LEDs only when
+ * 0x84308c+0xe != 0 -- the user's LED preset (the triple-click cycle, 0 = LEDs
+ * off) -- or UI state 2; dims the buffer at 0x8431dc IN PLACE (3/10) in dim
+ * mode (+0x1c) or under 21 % battery; sends it scaled by the animation level
+ * 0x84562d (/100). This file reads the LED preset and never writes it.
  *
  * Measured temperature is +0x28 (F): +0x2a is Celsius on this device.
  */
 #include "ramp.h"
 
-#define LED_ENABLED      (*(volatile u8 *)(0x84308c + 0x0e))
+#define LED_ENABLED      DEV_LEDS_ON()
 #define LED_RGB          ((volatile u8 *)0x8431dc)   /* 4 x (R,G,B) */
 #define LED_COUNT        4
 #define led_push         STOCK_FN(void_fn, 0x90bc)
+
+/* The stock dispatcher's animation state (FUN_0000920c, the same scheme as the
+ * Sport's): +0 the effect, +1 the level every push is scaled by (0-100), +5
+ * blinks still to play (3 queued at every session start, 0x745e), +6 a
+ * fade-in, +7 a fade-out; with nothing queued it sets the level back to 100.
+ * Effect 9 is the warning flash: +4 flashes, then effect 0 (low battery at
+ * session start, faults, the dim-mode toggle). While any of that runs the
+ * lights stay stock's, so cues and warnings play out and the level is never
+ * frozen mid-blink -- it only moves while the dispatcher runs. */
+#define LED_ANIM         ((volatile u8 *)0x84562c)
+#define LED_EFFECT_FLASH 9
+/* The dispatcher powers the LEDs by setting one GPIO output bit after every
+ * push: the pin is the u16 at 0x84317c (port in the high byte, bit mask in
+ * the low byte, chosen at boot by board revision), output register 0x800583 +
+ * port * 8 -- and only while 0x843184 (in the OTA state next to the OTA
+ * offset 0x843180) is clear. A session path of the dispatcher clears that bit,
+ * so this file sets it the same way before each push, and leaves the lights
+ * to stock while the flag is set. */
+#define LED_RAIL_PIN     (*(volatile u16 *)0x84317c)
+#define LED_RAIL_BLOCK   (*(volatile u8 *)0x843184)
+#define GPIO_OUT_BASE    0x800583
+
+/* The control button's light: an RGB LED on PB5/PB6/PB7, driven by a
+ * software-PWM timer interrupt (0x49c: counter 0-99 against three duty
+ * values, active low): 0x845602 red, 0x8455fc green, 0x8455fe blue, each
+ * 0-100. The dispatcher sets them to colour * level / 100 after its ring
+ * push. No DMA is involved, so its timing can't disturb the ring. */
+#define BTN_DUTY_R   (*(volatile u16 *)0x845602)
+#define BTN_DUTY_G   (*(volatile u16 *)0x8455fc)
+#define BTN_DUTY_B   (*(volatile u16 *)0x8455fe)
+#define stock_led_dispatch  STOCK_FN(void_fn, 0x920c)
 
 static const u8 STOP_R[5] = {  60, 140, 220, 255, 255 };
 static const u8 STOP_G[5] = {  90,  70,  60, 120, 215 };
 static const u8 STOP_B[5] = { 255, 230, 160,  60,  60 };
 
+static u8 stock_animating(void)
+{
+    return LED_ANIM[5] || LED_ANIM[6] || LED_ANIM[7] || LED_ANIM[1] < 100 ||
+           LED_ANIM[0] == LED_EFFECT_FLASH;
+}
+
+/* 0-255 colour -> 0-100 duty (the level is 100 whenever this draws) */
+static void button(u8 r, u8 g, u8 b)
+{
+    BTN_DUTY_R = (u16)rom_div(r * 100, 255);
+    BTN_DUTY_G = (u16)rom_div(g * 100, 255);
+    BTN_DUTY_B = (u16)rom_div(b * 100, 255);
+}
+
 /* Preset picker: one LED per preset position, lit up to the chosen preset in
- * that preset's colour; with the ramp system off, every LED is dim red. */
+ * that preset's colour; with the ramp system off, every LED is dim red. The
+ * button shows the preset's colour, or red when off. */
 static void show_selection(u8 sel, u8 enabled)
 {
     int i;
@@ -36,39 +82,16 @@ static void show_selection(u8 sel, u8 enabled)
         LED_RGB[i * 3 + 1] = enabled ? (on ? RAMP_PRESET_RGB[sel][1] : 0) : 0;
         LED_RGB[i * 3 + 2] = enabled ? (on ? RAMP_PRESET_RGB[sel][2] : 0) : 0;
     }
-    led_push();
+    if (enabled)
+        button(RAMP_PRESET_RGB[sel][0], RAMP_PRESET_RGB[sel][1], RAMP_PRESET_RGB[sel][2]);
+    else
+        button(RAMP_OFF_R, RAMP_OFF_G, RAMP_OFF_B);
 }
 
-static void button(volatile ramp_state_t *st, u8 r, u8 g, u8 b)
+static void show_ramp(volatile ramp_state_t *st)
 {
-    st->btn_rgb[0] = r;
-    st->btn_rgb[1] = g;
-    st->btn_rgb[2] = b;
-    st->btn_on = 1;
-}
-
-void ramp_led_update(void)
-{
-    volatile ramp_state_t *st = RAMP_STATE;
     int lo = 0x7fff, hi = 0, f, frac, x, seg, t, lit, i;
     u8 r, g, b;
-
-    if (st->picker_on && !ramp_active(st) && !DEV_IDLE())
-        ramp_picker_close(st);   /* asleep, or off the idle state: stop showing it */
-    st->btn_on = 0;              /* the button is stock's unless set below */
-    if (LED_ENABLED == 0)
-        return;
-    if (!ramp_active(st)) {
-        if (st->picker_on) {
-            show_selection(st->picker_sel, st->picker_enabled);
-            if (st->picker_enabled)
-                button(st, RAMP_PRESET_RGB[st->picker_sel][0], RAMP_PRESET_RGB[st->picker_sel][1],
-                       RAMP_PRESET_RGB[st->picker_sel][2]);
-            else
-                button(st, RAMP_OFF_R, RAMP_OFF_G, RAMP_OFF_B);
-        }
-        return;
-    }
 
     for (i = 0; i < st->n_stages; i++) {
         f = WP_F(st, i);
@@ -93,33 +116,42 @@ void ramp_led_update(void)
         LED_RGB[i * 3 + 1] = on ? g : 0;
         LED_RGB[i * 3 + 2] = on ? b : 0;
     }
-    led_push();
-    button(st, r, g, b);
+    button(r, g, b);
 }
 
-/* The control button's light. It's an RGB LED on PB5/PB6/PB7, driven by a
- * software-PWM timer interrupt (0x49c: counter 0-99 against three duty values,
- * active low): 0x845602 red, 0x8455fc green, 0x8455fe blue, each 0-100. The
- * stock LED effect dispatcher 0x920c (one caller, 0x61ae, top of the main loop)
- * sets them, scaled by the brightness byte 0x84562d. Installed at 0x61ae: while a
- * ramp or the picker owns the lights, set the duties here instead of running
- * the stock effects (the ring is pushed by ramp_led_update); otherwise run the
- * dispatcher unchanged, which also puts the stock colour back. */
-#define BTN_DUTY_R   (*(volatile u16 *)0x845602)
-#define BTN_DUTY_G   (*(volatile u16 *)0x8455fc)
-#define BTN_DUTY_B   (*(volatile u16 *)0x8455fe)
-#define BRIGHTNESS   (*(volatile u8 *)0x84562d)
-#define stock_led_dispatch  STOCK_FN(void_fn, 0x920c)
-
-void ramp_btn_entry(void)
+/* After every ramp tick: the picker only shows on the idle screen. */
+void ramp_led_tick(void)
 {
     volatile ramp_state_t *st = RAMP_STATE;
-    int bri = BRIGHTNESS > 100 ? 100 : BRIGHTNESS;
-    if (st->magic != RAMP_MAGIC || !st->btn_on || LED_ENABLED == 0) {
+    if (st->picker_on && !ramp_active(st) && !DEV_IDLE())
+        ramp_picker_close(st);   /* asleep, or off the idle state: stop showing it */
+}
+
+/* Installed at 0x61ae, the only call of the stock LED effect dispatcher 0x920c
+ * (main loop, every tick). While a ramp or the picker owns the lights, fill
+ * both, power the LEDs and push the ring the way the dispatcher's own tail
+ * does; otherwise -- LEDs off, a stock cue playing, OTA, nothing to show --
+ * run the dispatcher unchanged, which also puts the stock colours back. The
+ * buffer is refilled before every push, so 0x90bc's in-place dimming never
+ * compounds. */
+void ramp_led_entry(void)
+{
+    volatile ramp_state_t *st = RAMP_STATE;
+    u16 pin;
+
+    if (st->magic != RAMP_MAGIC || LED_ENABLED == 0 || LED_RAIL_BLOCK != 0 || stock_animating()) {
         stock_led_dispatch();
         return;
     }
-    BTN_DUTY_R = (u16)rom_div(st->btn_rgb[0] * bri, 255);
-    BTN_DUTY_G = (u16)rom_div(st->btn_rgb[1] * bri, 255);
-    BTN_DUTY_B = (u16)rom_div(st->btn_rgb[2] * bri, 255);
+    if (ramp_active(st))
+        show_ramp(st);
+    else if (st->picker_on && DEV_IDLE())
+        show_selection(st->picker_sel, st->picker_enabled);
+    else {
+        stock_led_dispatch();
+        return;
+    }
+    pin = LED_RAIL_PIN;
+    *(volatile u8 *)(GPIO_OUT_BASE + (pin >> 8) * 8) |= (u8)pin;
+    led_push();
 }

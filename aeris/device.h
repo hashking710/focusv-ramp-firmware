@@ -52,7 +52,7 @@
 #define DEV_STOP            0x7200
 #define DEV_ROM_DIV         0x1ac
 
-#define DEV_RAMP_FLASH      0x15000
+#define DEV_RAMP_FLASH      0x16000   /* code gets 0x14000-0x15fff */
 #define DEV_FLASH_READ      0xab8
 #define DEV_FLASH_ERASE     0xa1c
 #define DEV_FLASH_WRITE     0xa5c
@@ -75,7 +75,30 @@
 /* Button events (consumer 0x4ee8, mailbox 0x845620, UI state 0x84308c+2 = 1
  * on the idle screen). A hold from idle opens the preset picker; single clicks
  * step through the four presets, a triple click switches the ramp system on or
- * off, and a hold leaves it. */
+ * off, and a hold leaves it.
+ *
+ * The button scanner (0x8c60) posts 16 on every press and 15 once a press is
+ * held 200 scans; on release it posts 7..11 for 1..5+ presses, and a long
+ * press posts no click. Presses of the current gesture count at 0x84308c+0x1d,
+ * so a hold that ends a multi-press gesture -- 2 presses + hold (13), 4 presses
+ * + hold (12: dim mode, +0x1c), 7 presses + hold (14) -- posts its 15 with a
+ * count above 1: only a hold from a single press opens the picker. The 0xCC
+ * handler posts 18 / 19 / 20 for the app's A5 / AF / 66 markers (0xb934,
+ * 0xbe3a, 0xbe2c). */
+#define DEV_EV_CLICKS()     (*(volatile u8 *)(0x84308c + 0x1d))
+#define DEV_EV_APP_MIN      18
+/* 11 is power off / sleep: five presses, but also posted by the app's power-off
+ * handling (0xb71a, 0xb9bc) and by the sleep request at 0x53b8 -- the picker
+ * never takes it. */
+#define DEV_EV_POWER_OFF    11
+/* The consumer's prelude, run for every pending event, resets the idle
+ * auto-off timer (+0x3f/+0x40) and refreshes 0x8432ec+0x20. Events the picker
+ * takes are handed on as 16 (a press), which state 1 ignores, so that still
+ * runs. */
+#define DEV_EV_NOOP         16
+/* The user's LED preset, 0 = off (cycled by event 9 in the consumer). With it
+ * off the picker doesn't open: it would be an invisible mode taking clicks. */
+#define DEV_LEDS_ON()       (*(volatile u8 *)(0x84308c + 0x0e))
 #define DEV_EV_MB           0x845620
 #define DEV_EV_CONSUMER     0x4ee8
 #define DEV_UI_STATE_ADDR   0x84308e
@@ -89,13 +112,15 @@
  * (the power-on transition); the picker honours the same gate. */
 #define DEV_EV_IGNORED()    ((*(volatile u8 *)(0x84308c + 7)) != 0 && (*(volatile u8 *)(0x84308c + 9)) == 1)
 #define DEV_IDLE()          ((*(volatile u8 *)DEV_UI_STATE_ADDR) == 1 && STRUCT_BASE[OFF_SESSION] == 0)
-/* UI state 7 is the cleaning cycle: the orchestrator (0x81aa -> 0x85ac) forces
- * its own 80 C / 176 F target. A sentinel slot must not turn it into a ramp. */
+/* UI state 7 is quick heat (two presses + a long hold from sleep, consumer
+ * 0x50a6 -> session start 0x7394): the orchestrator (0x81aa -> 0x85ac) forces
+ * its own 80 C / 176 F target, the first reach zeroes the countdown, and it
+ * runs until a press stops it. A sentinel slot must not turn it into a ramp --
+ * it would take over the countdown, end it and could count it as a dab. */
 #define DEV_ARM_BLOCKED()   ((*(volatile u8 *)DEV_UI_STATE_ADDR) == 7)
 
 
-struct ramp_state_s;
-void ramp_led_update(void);
-#define DEV_AFTER_TICK(st)  ramp_led_update()
+void ramp_led_tick(void);
+#define DEV_AFTER_TICK(st)  ramp_led_tick()
 
 #endif

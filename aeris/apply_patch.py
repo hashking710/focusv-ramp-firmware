@@ -50,22 +50,22 @@ LENGTH_FIELD_OFFSET = 24
 # HEADER_LEN + CODE_INJECT_ADDR, so it runs at CODE_INJECT_ADDR + 0x28, where
 # tools/build.py links it; the waypoint store has its own sector after it.
 CODE_INJECT_ADDR = 0x14000
-WAYPOINT_SECTOR = 0x15000
-IMAGE_END_ADDR = 0x16000
+WAYPOINT_SECTOR = 0x16000
+IMAGE_END_ADDR = 0x17000
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_aeris_v1.bin"   # built locally, never published
-BLOB_SHA256 = "984eaf0fdb1b2c19e80eeb36190af20549111f67f89b1b61f8528f240ff95c4f"   # written by tools/build.py
+BLOB_SHA256 = "b1c574a23f56e2731802493105538d5e5f4bc5f3eaa622422f0ac65cb3475e96"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock
 # instruction; each replacement is the real assembler's `tjl` to the named
 # function in the blob above.
 PATCHES = [
-    (0x61AE, bytes.fromhex("03902d98"), bytes.fromhex("0e90039e")),  # tjl 0x920c -> ramp_btn_entry
-    (0x645C, bytes.fromhex("fe97449d"), bytes.fromhex("0e90fa9c")),  # tjl 0x4ee8 -> ramp_event_entry
+    (0x61AE, bytes.fromhex("03902d98"), bytes.fromhex("0e90159d")),  # tjl 0x920c -> ramp_led_entry
+    (0x645C, bytes.fromhex("fe97449d"), bytes.fromhex("0e90129d")),  # tjl 0x4ee8 -> ramp_event_entry
     (0x6464, bytes.fromhex("0190769e"), bytes.fromhex("0d90679e")),  # tjl 0x8154 -> ramp_trampoline
     (0xB066, bytes.fromhex("0390659b"), bytes.fromhex("0990fb9c")),  # tjl 0xe734 -> ramp_announce_entry
-    (0xB490, bytes.fromhex("35a3fb1c"), bytes.fromhex("0990229d")),  # tmovs r3, #53 -> ramp_marker_entry
+    (0xB490, bytes.fromhex("35a3fb1c"), bytes.fromhex("0990549d")),  # tmovs r3, #53 -> ramp_marker_entry
 ]
 
 

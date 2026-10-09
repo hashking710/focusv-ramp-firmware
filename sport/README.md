@@ -41,8 +41,9 @@ Body:    90,860 bytes (after the 40-byte header), SHA-1 4b57f086a175...
 | 0x57ee | call to the LED effect dispatcher `0x8ff8` (the only caller) | `ramp_led_entry`: button light and LEDs while a ramp or the picker owns them, else the stock effects |
 | 0xa9ea | stock send of the `0xAA` dab-counter reply (notify `0xec3c`) | `ramp_announce_entry`: sends it unchanged, then announces the patch (`0xBC`) |
 
-The code goes at flash 0x18000 and runs at 0x18028. The waypoint store has its own sector at
-0x19000, and the output image ends with it, at 0x1a000 (106,500 bytes with the trailer). The stock
+The code goes at flash 0x18000 and runs at 0x18028, with 8 KB to grow into. The waypoint store has
+its own sector at 0x1a000, and the output image ends with it, at 0x1b000 (110,596 bytes with the
+trailer). The stock
 OTA accepts at most 124 KB: `main()` calls the SDK's `bls_ota_set_fwSize_and_fwBootAddr(124,
 0x20000)`, and the OTA start rejects a larger header length. An earlier version ended the image at
 0x20000 (128 KB + 4), which the stock OTA would have refused. An earlier version still put the
@@ -76,8 +77,8 @@ Like stock, the picker ignores button events during the power-on transition (str
 `+10` == 1, which the stock consumer also checks). With the LEDs off it doesn't open at all: it
 would be an invisible mode taking clicks for up to 30 s. Turn the LEDs on (triple click) to use it.
 
-**Cleaning cycle.** Two presses + a long hold from sleep starts the stock cleaning cycle (UI state
-7, a session at a forced 90 °C / 193 °F). It never arms a ramp, even from a sentinel slot.
+**Quick heat.** Two presses + a long hold from sleep starts the stock quick heat (UI state 7, a
+session at a forced 90 °C / 193 °F that runs until a press stops it). It never arms a ramp, even from a sentinel slot.
 
 **The button light.** During a ramp it shows the same temperature colour as the LEDs (blue at
 the coolest stage through to gold at the hottest); in the picker, the preset's colour, or red when the
@@ -116,7 +117,7 @@ keep both.
 Every address in [`device.h`](device.h) is listed with the stock code that proves what it means.
 
 **Flash use, from every stock erase call:** settings at 0x40000–0x43fff, pairing at 0x74000+, and
-the OTA writes the other bank (0x20000 or 0) -- nothing stock touches 0x18000–0x19fff. The store
+the OTA writes the other bank (0x20000 or 0) -- nothing stock touches 0x18000–0x1afff. The store
 address is physical: running from bank 0 it is the image's own erased sector; after an OTA that
 lands in bank 1 (0x20000) it is that sector of the now-inactive bank 0, which the next OTA erases.
 Either way a ramp starts from a fresh or an older store, both checked before use.

@@ -211,8 +211,6 @@ typedef struct {
     u8  picker_enabled; /* the ramp system's on/off, cached while the picker shows */
     u32 picker_t0;    /* system tick of the picker's last event (timeout) */
     u16 heat_s;       /* seconds this stage has spent heating, not at temperature */
-    u8  btn_on;       /* Aeris/Sport: the button light shows btn_rgb (ramp_led.c) */
-    u8  btn_rgb[3];
     u16 ann_tries;    /* announcement send attempts left (ramp_announce.c) */
     u8  ann_enabled;  /* the announcement's fields, captured when it's queued */
     u8  ann_preset;
@@ -274,8 +272,8 @@ void ramp_toggle_enabled(void);
 u8   ramp_default_stages(volatile ramp_state_t *st, u8 sel);
 void ramp_announce_tick(volatile ramp_state_t *st);
 void ramp_picker_close(volatile ramp_state_t *st);
-/* A device state in which a sentinel session must stay a stock session (Sport:
- * its cleaning cycle). */
+/* A device state in which a sentinel session must stay a stock session (Aeris
+ * and Sport: quick heat, UI state 7). */
 #ifndef DEV_ARM_BLOCKED
 #define DEV_ARM_BLOCKED()    0
 #endif

@@ -519,7 +519,7 @@ static void t_stock_mode(void)
     tick();
     upload(1, 1, 430, 221, 12);
     announce_now();
-    CHECK(last_pkt[6] == 2 && last_pkt[8] == 0x01, "ramp mode announce: protocol %d flags %#x", last_pkt[6], last_pkt[8]);
+    CHECK(last_pkt[6] == 3 && last_pkt[8] == 0x01, "ramp mode announce: protocol %d flags %#x", last_pkt[6], last_pkt[8]);
 
     ramp_marker_dispatch(RAMP_MODE_MARKER, RAMP_MODE_STOCK);
     CHECK(ramp_stock_mode() && ST()->stock_mode == 1, "not in stock mode");
@@ -644,6 +644,21 @@ static void t_mode_gesture(void)
     CHECK(!ramp_stock_mode(), "switched in standby");
 }
 
+static void t_announce_ramp(void)
+{
+    int i, seen_on = 0;
+    printf("the announcement reports a ramp starting and ending (bit 2)\n");
+    reset_device(0);
+    tick();
+    start_session(1, 150, 65, 30);
+    for (i = 0; i < 3; i++) tick();
+    CHECK(ramp_active(ST()) && last_pkt[0] == 0xbc && (last_pkt[8] & 0x04), "no 'ramp running' announcement at arm (flags %#x)", last_pkt[8]);
+    seen_on = (last_pkt[8] & 0x04) != 0;
+    for (i = 0; i < 400 * TPS && sim_struct[OFF_SESSION]; i++) tick();
+    for (i = 0; i < 5; i++) tick();
+    CHECK(seen_on && !ramp_active(ST()) && last_pkt[0] == 0xbc && !(last_pkt[8] & 0x04), "no 'ramp ended' announcement (flags %#x)", last_pkt[8]);
+}
+
 static void t_rank_change(void)
 {
     int i;
@@ -750,6 +765,7 @@ int main(void)
     t_rank_change();
     t_power_cut();
     t_mode_gesture();
+    t_announce_ramp();
     t_picker_timeout();
     t_flash_writes();
     CHECK(write_too_long == 0, "%d flash writes longer than DEV_FLASH_WRITE_MAX", write_too_long);

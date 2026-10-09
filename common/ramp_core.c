@@ -201,6 +201,7 @@ static void try_arm(volatile ramp_state_t *st)
     st->save_held = 0;
     hold_save(st);        /* before the slot changes */
     apply_stage(st, 1);
+    ramp_announce_queue(st);   /* tell a connected app: a ramp is running */
 }
 
 /* Restores the slot only when the state is provably one try_arm wrote: the
@@ -224,6 +225,7 @@ static void disarm(volatile ramp_state_t *st)
     st->save_held = 0;
     st->stage = 0;
     st->counted = 0;
+    ramp_announce_queue(st);   /* ... and that it ended */
 }
 
 /* ---- per tick ----------------------------------------------------------- */

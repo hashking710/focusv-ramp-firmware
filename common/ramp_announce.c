@@ -6,9 +6,12 @@
  *
  *   [BC, 0C, 'T','R','M','P', protocol, device, flags, preset, offset, BC]
  *
- * device: 1 Carta 2, 2 Aeris, 3 Sport. flags (protocol 2): bit 0 ramps
- * enabled, bit 1 stock mode (protocol 1 sent 0 / 1 = enabled there).
- * offset: signed F. It's also queued after a mode switch. Stock firmware never
+ * device: 1 Carta 2, 2 Aeris, 3 Sport. flags: bit 0 ramps enabled, bit 1
+ * stock mode (protocol 2+), bit 2 a ramp is running (protocol 3; protocol 1
+ * sent 0 / 1 = enabled there). offset: signed F. It's also queued after a
+ * mode switch and whenever a ramp starts or ends -- the status packet can't
+ * tell an app that: its session byte is the countdown's low byte, which reads
+ * 0 at every multiple of 256 s of a ramp. Stock firmware never
  * sends 0xBC, and nothing extra is sent to a stock device. Sent from the tick
  * rather than right after the 0xAA reply because the notify queue refuses
  * packets while the sync burst fills it (non-zero return); the fields are read
@@ -17,9 +20,10 @@
 
 #define ANNOUNCE_OP        0xbc
 #define ANNOUNCE_LEN       12
-#define ANNOUNCE_PROTOCOL  2
+#define ANNOUNCE_PROTOCOL  3
 #define ANNOUNCE_ENABLED   0x01
 #define ANNOUNCE_STOCK     0x02
+#define ANNOUNCE_RAMP      0x04
 /* Main-loop passes to keep retrying: the sync burst fills the notify queue
  * and it drains over several connection intervals, so this has to outlast that. */
 #define ANNOUNCE_TRIES     0xffff
@@ -30,7 +34,8 @@ typedef int (*notify_fn)(int handle, const u8 *data, int len);
 /* Captures the fields now and leaves the sending to ramp_announce_tick. */
 void ramp_announce_queue(volatile ramp_state_t *st)
 {
-    st->ann_flags = (ramp_enabled() ? ANNOUNCE_ENABLED : 0) | (st->stock_mode ? ANNOUNCE_STOCK : 0);
+    st->ann_flags = (ramp_enabled() ? ANNOUNCE_ENABLED : 0) | (st->stock_mode ? ANNOUNCE_STOCK : 0) |
+                    (ramp_active(st) ? ANNOUNCE_RAMP : 0);
     st->ann_preset = ramp_selected();
     st->ann_offset = (u8)ramp_offset();
     st->ann_tries = ANNOUNCE_TRIES;

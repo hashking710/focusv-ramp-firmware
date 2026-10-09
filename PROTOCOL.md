@@ -28,16 +28,19 @@ notifies:
 
 | Byte | Meaning |
 | --- | --- |
-| 6 `protocol` | 2 for this version. Protocol 1 had no stock mode, and byte 8 was 0 / 1 (ramps enabled). |
+| 6 `protocol` | 3 for this version. Protocol 2 had no bit 2; protocol 1 had no stock mode, and byte 8 was 0 / 1 (ramps enabled). |
 | 7 `device` | 1 Carta 2, 2 Aeris, 3 Carta Sport |
-| 8 `flags` | bit 0: ramps enabled (the on-device on / off switch). bit 1: stock mode. |
+| 8 `flags` | bit 0: ramps enabled (the on-device on / off switch). bit 1: stock mode. bit 2: a ramp is running. |
 | 9 `preset` | the selected built-in preset, 0-5 |
 | 10 `offset` | the setup offset, signed °F (-10 to +15) |
 
 Stock firmware never sends `0xBC`. No announcement after a sync means the
 device isn't patched (or runs a build from before the announcement existed).
 
-The device also announces right after a mode switch.
+The device also announces right after a mode switch, and whenever a ramp starts
+or ends. Use bit 2 to follow a ramp, not the `0x99` status: its session byte
+(byte 5) is the countdown's low byte, which reads 0 at every multiple of 256
+seconds of a ramp.
 
 ## Commands: the stock set-temperature packet
 

@@ -187,6 +187,7 @@ static void ramp_tick(void)
         st->picker_dirty = 0;
         st->picker_enabled = 0;
         st->ann_tries = 0;
+        st->press_awake = 0;
     }
 
     ramp_announce_tick(st);

@@ -54,7 +54,7 @@ WAYPOINT_SECTOR = 0x16000
 IMAGE_END_ADDR = 0x17000
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_aeris_v1.bin"   # built locally, never published
-BLOB_SHA256 = "7e72945a960afe6fda282b12b5a178fa3c3afdffa99401c6bc535d5fc08c3b67"   # written by tools/build.py
+BLOB_SHA256 = "bf0e77c18432d1f39ee8f70b30b7f8763f5bf88b57f96351da1ef695c36694ff"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock
@@ -65,7 +65,7 @@ PATCHES = [
     (0x645C, bytes.fromhex("fe97449d"), bytes.fromhex("0e90389d")),  # tjl 0x4ee8 -> ramp_event_entry
     (0x6464, bytes.fromhex("0190769e"), bytes.fromhex("0d90699e")),  # tjl 0x8154 -> ramp_trampoline
     (0xB066, bytes.fromhex("0390659b"), bytes.fromhex("09901f9d")),  # tjl 0xe734 -> ramp_announce_entry
-    (0xB490, bytes.fromhex("35a3fb1c"), bytes.fromhex("09907a9d")),  # tmovs r3, #53 -> ramp_marker_entry
+    (0xB490, bytes.fromhex("35a3fb1c"), bytes.fromhex("09909a9d")),  # tmovs r3, #53 -> ramp_marker_entry
 ]
 
 

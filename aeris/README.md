@@ -49,8 +49,11 @@ other OTA bank, so nothing stock touches 0x14000-0x16fff while it runs from bank
 
 ## Preset picker and on/off
 
-From the idle state (no session), with the LEDs on, **hold the button** (a single press, held until
-the stock long hold registers: 200 button scans) to open the picker. A hold that ends a multi-press
+With the device fully on (awake, not in standby), idle (no session) and the LEDs on, **hold the
+button** (a single press, held until
+the stock long hold registers: 200 button scans) to open the picker. A hold whose press woke the device from standby
+only wakes it, as in stock: the hook notes at the press (16, before the consumer wakes the device)
+whether it was already awake. A hold that ends a multi-press
 gesture (two presses + hold, four presses + hold for dim mode, seven presses + hold) stays the
 stock gesture. Inside it:
 

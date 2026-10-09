@@ -227,6 +227,8 @@ typedef struct {
     u8  picker_dirty; /* picker_sel changed and not yet written to flash */
     u8  picker_enabled; /* the ramp system's on/off, cached while the picker shows */
     u32 picker_t0;    /* system tick of the picker's last event (timeout) */
+    u8  press_awake;  /* Aeris/Sport: the device was fully on when the button
+                       * went down (not woken from standby by that press) */
     u16 heat_s;       /* seconds this stage has spent heating, not at temperature */
     u32 heat_t0;      /* Aeris/Sport: system tick heat_s was last advanced at */
     u16 ann_tries;    /* announcement send attempts left (ramp_announce.c) */

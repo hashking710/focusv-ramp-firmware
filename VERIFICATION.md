@@ -37,7 +37,7 @@ Builds: Carta 2 PROD-111224, Aeris PROD-111224, Carta Sport PROD-030426.
 | Stock hold (15) from idle does nothing; picker entry only from a single press, LEDs on | traced (Sport 0x47be, Aeris 0x50f4) |
 | Power off (11: five clicks, the app's command, the sleep request) and app events always reach stock | traced (Sport 0xb300 / 0x4934, Aeris 0xb71a / 0xb9bc / 0x53b8) |
 | Taken events reach the consumer as 16 (ignored in UI 1), so the auto-off timer resets | traced (Sport prelude +0x42, Aeris +0x3f / +0x40) |
-| Hold from standby (UI 8): the press wakes, then the hold opens the picker | open: stock does nothing on that hold; decide whether that's acceptable |
+| A hold from standby (UI 8) only wakes the device; the picker opens only on a device that's fully on | traced: the consumer wakes on 16-18 in UI 8 (Sport 0x461e, Aeris 0x4f4a); the hook records at the press (16), before the consumer runs, whether UI was already 1 |
 | Ring and button share PWM0 / DMA7 (Sport): pushed button -> rail -> ring, from the dispatcher site | traced (0x8efc, 0x8cf8, 0x8ff8 tail) |
 | Animation gate (blinks +5, fades +6 / +7, level +1, warning effect 9) | traced (Sport 0x8ff8, 0x9976; Aeris 0x920c, 0x9b62); nothing else writes those fields |
 | Aeris LED rail pin (0x84317c) and OTA flag (0x843184) | traced (0x920c tail) |

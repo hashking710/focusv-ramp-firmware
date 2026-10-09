@@ -18,9 +18,16 @@ void ramp_event_entry(void)
     volatile u8 *mb = EV_MB;
     int ev = mb[0];
 
+    /* The picker only opens on a device that's fully on: note, at the press
+     * (16) -- before the consumer runs it, which is what wakes a device in
+     * standby -- whether it was already awake. A hold that began by waking it
+     * does nothing, as in stock. */
+    if (mb[1] && ev == DEV_EV_NOOP)
+        RAMP_STATE->press_awake = DEV_IDLE() && !DEV_EV_IGNORED();
+
     if (mb[1] && !DEV_EV_IGNORED()) {
         u8 pickable = ev != DEV_EV_POWER_OFF && ev < DEV_EV_APP_MIN;
-        u8 can_enter = DEV_EV_CLICKS() <= 1 && DEV_LEDS_ON() != 0;
+        u8 can_enter = DEV_EV_CLICKS() <= 1 && DEV_LEDS_ON() != 0 && RAMP_STATE->press_awake;
         if (ramp_picker_event(RAMP_STATE, ev, DEV_IDLE() && pickable,
                               can_enter ? DEV_PICK_ENTER : -2, DEV_PICK_NEXT,
                               DEV_PICK_PREV, DEV_PICK_EXIT, DEV_PICK_TOGGLE))

@@ -16,6 +16,8 @@ through:
 
 Usage:
     python3 tools/make_logo.py --mark mark.png --word wordmark.png [--preview strip.png]
+(the shipped strip: --mark "terpline logo.png" --word "terpline logo text.png",
+from terpline-web/public/icons)
     python3 tools/make_logo.py --logo logo.png [--preview strip.png]
 --mark / --word: hand-cut art with a transparent background (preferred; the
 alpha gives clean edges on black). --logo: the 1254 x 1254 master, cut

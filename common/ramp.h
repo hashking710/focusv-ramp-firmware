@@ -27,9 +27,10 @@
  *  between ticks the countdown may only stay put or drop by one second, and any
  *  other change (a stock reload from the slot's hold time) is undone. The slot's
  *  hold time itself is never touched. Every hold is time AT temperature: on
- *  Aeris and Sport the stock clock only runs once the target is reached; on the
- *  Carta 2 it runs from the start of each stage, so the ramp gives back each
- *  second spent heating, up to RAMP_MAX_HEAT_S per stage.
+ *  all three devices the stock clock only runs once the target is reached
+ *  (Carta 2 0xb5b8, Aeris 0x8980, Sport 0x8448). A device whose clock ran
+ *  through heat-up would get each heating second given back instead, up to
+ *  RAMP_MAX_HEAT_S per stage (kept for that case; the host tests exercise it).
  *
  *  Dab counting. Once a ramp is on stage 2 or later and has run 20 seconds at
  *  temperature (the stock "reached" flag, seconds counted in at_temp_s), the
@@ -109,6 +110,11 @@ typedef short (*rom_div_fn)(int, int);
 typedef void (*flash_read_fn)(int addr, int len, void *buf);
 typedef void (*flash_erase_fn)(int addr);
 typedef void (*flash_write_fn)(int addr, int len, void *buf);
+/* The most one flash_write call may take (a device.h can lower it: the
+ * Carta 2's write verifies into a 64-byte stack buffer). */
+#ifndef DEV_FLASH_WRITE_MAX
+#define DEV_FLASH_WRITE_MAX  RAMP_STORE_TOTAL
+#endif
 #define flash_read   STOCK_FN(flash_read_fn, DEV_FLASH_READ)
 #define flash_erase  STOCK_FN(flash_erase_fn, DEV_FLASH_ERASE)
 #define flash_write  STOCK_FN(flash_write_fn, DEV_FLASH_WRITE)

@@ -5,7 +5,8 @@
  *     preset slot; the heater moves toward it (1 F per tick here);
  *   - "reached" is set once the measured temperature is at the target;
  *   - the session countdown ticks once a second -- only while reached on Aeris
- *     and Sport, always on the Carta 2 (sim_carta_timing);
+ *     and Sport and Carta 2, always in the free-running model (sim_carta_timing,
+ *     which no device has -- it exercises the give-back path);
  *   - at zero the stock timer counts the session and stops it.
  * Then drives whole ramps, the picker, the store, the offset marker and the
  * announcement through the real patch code, and checks the results.
@@ -31,7 +32,7 @@ unsigned int sim_systick;
 int sim_picker_closed;
 static unsigned char flash[0x1000];
 static int erases, never_reach;
-static int carta_timing;     /* 1: countdown runs through heat-up (Carta 2) */
+static int carta_timing;     /* 1: free-running clock (no device; give-back path) */
 int sim_clock_waits;         /* !carta_timing, as the device.h macro sees it */
 static int tick_no;
 static int notify_busy;      /* sim_notify refuses this many packets first */
@@ -51,9 +52,12 @@ short sim_div(int a, int b) { return (short)(a / b); }
 
 void sim_flash_read(int addr, int len, void *buf) { memcpy(buf, flash + (addr - DEV_RAMP_FLASH), len); }
 void sim_flash_erase(int addr) { erases++; memset(flash + (addr - DEV_RAMP_FLASH), 0xff, 0x1000); }
+static int write_too_long;
 void sim_flash_write(int addr, int len, void *buf)
 {
     int i;
+    if (len > DEV_FLASH_WRITE_MAX)
+        write_too_long++;
     for (i = 0; i < len; i++)   /* NOR: a write can only clear bits */
         flash[addr - DEV_RAMP_FLASH + i] &= ((unsigned char *)buf)[i];
 }
@@ -169,7 +173,7 @@ static struct run run_to_end(int cap_s)
 static void t_default_preset(int carta)
 {
     struct run r;
-    printf("default preset (Balanced) in concentrate, %s timing\n", carta ? "Carta 2" : "Aeris/Sport");
+    printf("default preset (Balanced) in concentrate, %s timing\n", carta ? "free-running" : "waits-for-reached (all three devices)");
     reset_device(carta);
     tick();
     start_session(1, 150, 65, 30);
@@ -361,7 +365,7 @@ static void t_garbage_ram(void)
 static void t_heat_cap(void)
 {
     struct run r;
-    printf("Carta 2 clock, a stage that never reports reached: the heat cap keeps it moving\n");
+    printf("free-running clock, a stage that never reports reached: the heat cap keeps it moving\n");
     reset_device(1);
     never_reach = 1;
     tick();
@@ -377,7 +381,7 @@ static void t_heat_cap(void)
 static void t_heat_cap_waits(void)
 {
     struct run r;
-    printf("Aeris/Sport clock, a stage that never reports reached: the ramp runs the clock past the cap\n");
+    printf("waits-for-reached clock (all three devices), a stage that never reports reached: the ramp runs the clock past the cap\n");
     reset_device(0);
     never_reach = 1;
     tick();
@@ -449,6 +453,7 @@ int main(void)
     t_heat_cap_waits();
     t_picker_timeout();
     t_flash_writes();
+    CHECK(write_too_long == 0, "%d flash writes longer than DEV_FLASH_WRITE_MAX", write_too_long);
     printf(fails ? "\n%d FAILED\n" : "\nALL HOST TESTS PASSED\n", fails);
     return fails != 0;
 }

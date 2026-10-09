@@ -52,7 +52,10 @@ static void store_commit(u8 *buf)
     if (i == RAMP_STORE_TOTAL)
         return;
     flash_erase(DEV_RAMP_FLASH);
-    flash_write(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, buf);
+    for (i = 0; i < RAMP_STORE_TOTAL; i += DEV_FLASH_WRITE_MAX)   /* one page */
+        flash_write(DEV_RAMP_FLASH + i,
+                    RAMP_STORE_TOTAL - i < DEV_FLASH_WRITE_MAX ? RAMP_STORE_TOTAL - i : DEV_FLASH_WRITE_MAX,
+                    buf + i);
 }
 
 static void save_waypoint(u8 bank, u8 slot, u16 f, u16 c, u16 hold)

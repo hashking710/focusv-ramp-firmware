@@ -53,7 +53,11 @@ typedef void (*batt_anim_fn)(int x, int y, int w, int h, int a, int b, int c, in
 #define batt_anim   STOCK_FN(batt_anim_fn, 0x7a24)   /* db40's charging animation */
 #define orig_d3c0   STOCK_FN(void_fn, 0xd3c0)
 #define orig_dcac   STOCK_FN(void_fn, 0xdcac)
-#define orig_ce70   STOCK_FN(void_fn, 0xce70)
+/* 0xce70 returns the target it drew (the active slot in the display unit);
+ * 0xe9a8 (view 4, also the stock temperature editor) keeps that return value
+ * and draws its big target number and gauge from it. */
+typedef u16 (*u16_fn)(void);
+#define orig_ce70   STOCK_FN(u16_fn, 0xce70)
 #define orig_cf58   STOCK_FN(void_fn, 0xcf58)
 #define orig_db40   STOCK_FN(void_fn, 0xdb40)
 #define orig_d048   STOCK_FN(void_fn, 0xd048)   /* bottom row: dab counter */
@@ -475,14 +479,24 @@ void ramp_picker_draw(u8 sel, u8 enabled)
         rect(PICK_X + 40 + i * 18, PICK_Y + 14, 12, 8, i == sel ? lit : C_DOT_OFF);
 }
 
-void ramp_ce70_hide(void)
+/* Must return what 0xce70 returns, ramp or not (see orig_ce70). During a ramp
+ * it skips the drawing and returns the same value 0xce70 would: the active
+ * slot, F if +0x7 == 1 else C, concentrate if +0x9 == 1 else flower. */
+u16 ramp_ce70_hide(void)
 {
     volatile ramp_state_t *st = RAMP_STATE;
-    if (ramp_active(st))
-        return;
-    orig_ce70();
+    u16 v;
+    if (ramp_active(st)) {
+        u8 conc = STRUCT_BASE[0x09] == 1;
+        u8 rank = STRUCT_BASE[conc ? 0x0b : 0x0a];
+        if (STRUCT_BASE[0x07] == 1)
+            return *PRESET(conc ? TBL_CO_F : TBL_FL_F, rank);
+        return *PRESET(conc ? TBL_CO_C : TBL_FL_C, rank);
+    }
+    v = orig_ce70();
     if (st->picker_on && DEV_PICKER_SCREEN())
         ramp_picker_draw(st->picker_sel, st->picker_enabled);
+    return v;
 }
 void ramp_cf58_hide(void) { if (!ramp_active(RAMP_STATE)) orig_cf58(); }
 void ramp_db40_hide(void) { if (!ramp_active(RAMP_STATE)) orig_db40(); }

@@ -19,11 +19,26 @@
  *                   screen table pointer 0x1a3c0 is a runtime address: the
  *                   table is at disassembly 0x1a398 -- entries 4 and 14 both
  *                   point at 0x5740, which tests for exactly those screens.)
- *   + / - short  -> next / previous stage
+ *   + / - short  -> next / previous stage (stock: open the temperature editor,
+ *                   screen 6, and clear "reached" -- 0x610a);
+ *                   locked, passed to stock, which ignores them in a session
+ *                   (0x5bfc -> 0x5c06 -> 0x5728 -> return), so the lock holds
  *   + / - held   -> ignored (auto-repeat would skip every stage)
- *   double click -> ignored (stock +10 s would rewind the ramp clock)
- * Up/down are consumed rather than passed on, so the stock edit screen -- which
- * would rewrite the active preset slot mid-ramp -- can't be entered.
+ *   everything else -> taken, except events whose stock effect is safe
+ *                   mid-ramp: 7 / 17 (stop), 11 (power off), 14 (a press:
+ *                   nothing on screen 1), 18 (app +10 s: the ramp undoes the
+ *                   countdown change), 19-21 (system, overlays). The Carta 2
+ *                   only sets "reached" on screen 1 (0xb21c -> 0xb58c) and the
+ *                   ramp clears it at every stage, so nothing may move the
+ *                   screen off 1 mid-ramp. Taken, with their stock effect in a
+ *                   session: 3 / 4 (held +/-: temperature editor, screen 6),
+ *                   8 / 16 (+10 s / start: would rewind the ramp clock), 9
+ *                   (triple click: menu index, view 11), 10 (four clicks:
+ *                   lock -> lock prompt, screen 12 -- and a locked click
+ *                   can't stop), 12 (four clicks + hold: low power, screen
+ *                   10), 13 (long hold: next preset rank -- 0x61f6 / 0x6236
+ *                   -- and screen 8, which would move the active slot under
+ *                   the ramp), 6 / 15.
  *
  * Preset picker (ramp_picker.c), when no ramp is running: a single click on
  * the idle live view, with the device unlocked, opens it (see
@@ -76,12 +91,15 @@ void ramp_event_entry(void)
 
     if (mb[1] && ramp_active(st)) {
         u8 ev = mb[0];
-        if (ev == 2 || ev == 1) {
+        if ((ev == 2 || ev == 1) && STRUCT_BASE[OFF_LOCKED] == 0) {
             mb[1] = 0;
             ramp_step(st, ev == 2 ? 1 : -1);
             return;
         }
-        if (ev == 3 || ev == 4 || ev == 8 || ev == 16) {
+        /* Everything else that could leave screen 1 or move the active slot
+         * is taken; only events whose stock effect is safe mid-ramp pass. */
+        if (!(ev == 7 || ev == 11 || ev == 14 || ev == 17 || ev >= 18 ||
+              ev == 1 || ev == 2)) {
             mb[1] = 0;
             return;
         }

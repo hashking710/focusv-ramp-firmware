@@ -251,11 +251,11 @@ static void ramp_tick(void)
     if (t != st->last_left && t + 1 != st->last_left)
         FIELD16(OFF_COUNTDOWN) = t = st->last_left;
     /* One second went by on the stock clock. It counts toward the hold, and
-     * toward the dab, only at temperature (the stock "reached" flag). On Aeris
-     * and Sport the stock clock already waits for that; on the Carta 2 it runs
-     * through heat-up, so the second is given back. After RAMP_MAX_HEAT_S of
-     * heating a stage counts down anyway, so a stage that never reports
-     * reached can't stall the ramp. */
+     * toward the dab, only at temperature (the stock "reached" flag). All
+     * three stock clocks already wait for that (DEV_CLOCK_WAITS_FOR_REACHED,
+     * timed above); a clock that ran through heat-up would get the second
+     * given back here. After RAMP_MAX_HEAT_S of heating a stage counts down
+     * anyway, so a stage that never reports reached can't stall the ramp. */
     if (t + 1 == st->last_left) {
         if (STRUCT_BASE[OFF_REACHED]) {
             if (st->at_temp_s < 0xffff)

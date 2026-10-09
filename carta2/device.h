@@ -7,10 +7,22 @@
  *                 (traced, C branch 0x11cd8-0x11d96): big-endian, never clamped;
  *                 C -> +0x36/+0x4e, F = floor(9c/5)+32 -> +0x2a/+0x42, holds ->
  *                 +0x5a/+0x66 (the custom, rank 0 slot); the marker (byte 13, read
- *                 at 0x11d96 = the hook) is only acted on in UI states 16 or 4,
- *                 otherwise dropped without a reply (the app wakes it first)
- *   0xb5c2..0xb6f6 session timer: +0x1a countdown, completion bookkeeping on
- *                 0x8430e0, save arming +31/+33, stop 0x97f0, cue 0x843260
+ *                 at 0x11d96 = the hook) is only acted on on screens 1 (via
+ *                 0x124cc, which redraws view 15 first), 4 and 16 (gate
+ *                 0x11d7a, screen = 0x84309c+5); on any other screen the
+ *                 packet is dropped without a reply (the app wakes it first)
+ *   0xb5b8 session timer (40 Hz, 1 s every 40 calls): returns at once unless
+ *                 +0x2 (reached) is set -- the clock waits for temperature,
+ *                 like the Aeris and Sport; +0x1a countdown; at zero the
+ *                 counters on 0x8430e0 (flower +0,4,6,10,14 / concentrate
+ *                 +2,4,8,12,16), save arming +31 = 50 / +33 = 0, stop 0x97f0,
+ *                 cue 0x843260 +3 = 5 / +4 = 2; on screen 15 it zeroes the
+ *                 countdown instead
+ *   0xb8b8 (40 Hz): stops a session that's still cold (+0x1e <= 54 C) after
+ *                 300 ticks, or never reached (0x84531d, set with reached at
+ *                 0xb58c, cleared only by the stop) after 2600 ticks, and any
+ *                 session after 270000 ticks (~112 min); the screensaver
+ *                 (screen 16) only starts with no session
  */
 #ifndef DEVICE_H
 #define DEVICE_H
@@ -18,7 +30,7 @@
 #define DEV_STRUCT          0x843028
 #define OFF_SESSION         0x01   /* 1 = session running; cleared by 0x97f0 */
 #define OFF_REACHED         0x02   /* 0 = af2c reloads the target every tick */
-#define OFF_COUNTDOWN       0x1a   /* seconds; runs from the start of a session */
+#define OFF_COUNTDOWN       0x1a   /* seconds; counts only while +0x2 (reached) is set */
 #define OFF_MEAS_F          0x1c
 #define OFF_MEAS_C          0x1e
 #define OFF_SCREEN          0x79   /* 1 = live heating */
@@ -49,6 +61,11 @@
 #define DEV_FLASH_ERASE     0x924
 #define DEV_FLASH_WRITE     0x19a78   /* write, read back, retry x3. (0x19308 is the
                                        * PROD-071024 address -- mid-function in 111224) */
+/* 0x19a78 (addr, len, buf): page program 0x964, then reads the bytes back into
+ * a 64-byte stack buffer (sub sp, #0x40, just below the saved r8) and compares
+ * (0x13a80). Any len over 64 overwrites the caller's saved r8. The store is
+ * 66 bytes, so it's written in pieces of at most 64. */
+#define DEV_FLASH_WRITE_MAX 64
 
 #define DEV_RAMP_STATE      0x848000
 
@@ -93,6 +110,13 @@
 #define OFF_LOCKED          0x82
 #define SCREEN_LIVE         1
 #define DEV_PICKER_SCREEN() (STRUCT_BASE[OFF_SCREEN] == SCREEN_LIVE && STRUCT_BASE[OFF_LOCKED] == 0)
+/* The session timer (0xb5b8) counts only while "reached" is set. */
+#define DEV_CLOCK_WAITS_FOR_REACHED  1
+/* Screen 15: the orchestrator (0xaf2c) forces its own 85 C / 184 F target and
+ * the session timer zeroes the countdown -- the Carta 2's quick heat. No code
+ * in this build writes 15 to the screen, but if it's ever there a sentinel
+ * slot must not turn it into a ramp. */
+#define DEV_ARM_BLOCKED()   (STRUCT_BASE[OFF_SCREEN] == 15)
 #define DEV_PICK_COUNT      6
 #define DEV_PICK_ENTER      (-2)   /* disabled: no free gesture (see above) */
 #define DEV_PICK_NEXT       2

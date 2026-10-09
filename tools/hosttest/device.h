@@ -54,6 +54,7 @@ extern int sim_picker_closed;
 #define DEV_FLASH_READ      sim_flash_read
 #define DEV_FLASH_ERASE     sim_flash_erase
 #define DEV_FLASH_WRITE     sim_flash_write
+#define DEV_FLASH_WRITE_MAX 32   /* smaller than the store: every save is written in pieces */
 
 #define DEV_RAMP_STATE      sim_state
 #define RAMP_TRACE_LEN      1

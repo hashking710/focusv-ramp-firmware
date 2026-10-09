@@ -36,7 +36,7 @@ Body:    90,860 bytes (after the 40-byte header), SHA-1 4b57f086a175...
 | Site | Stock | Replaced with |
 | --- | --- | --- |
 | 0x58b0 | call to orchestrator `0x7c00` (the only caller) | `ramp_trampoline`: stock tick, the ramp, then the LEDs |
-| 0xb002 | marker-byte load before the A5/AF/66 chain | `ramp_marker_entry`: waypoint upload markers |
+| 0xb002 | marker-byte load before the A5/AF/66 chain | `ramp_marker_entry`: every patch command ([PROTOCOL.md](../PROTOCOL.md)) |
 | 0x58a8 | call to button-event consumer `0x45cc` (the only caller) | `ramp_event_entry`: the preset picker, then the stock consumer |
 | 0x57ee | call to the LED effect dispatcher `0x8ff8` (the only caller) | `ramp_led_entry`: button light and LEDs while a ramp or the picker owns them, else the stock effects |
 | 0xa9ea | stock send of the `0xAA` dab-counter reply (notify `0xec3c`) | `ramp_announce_entry`: sends it unchanged, then announces the patch (`0xBC`) |

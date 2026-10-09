@@ -154,25 +154,26 @@ hardware is the remaining step.
 ```text
 common/ramp.h        design notes, state, store format, safeguard limits
 common/ramp_core.c   ramp sequencer: arming, stages, countdown, dab counting
-common/ramp_store.c  waypoint store (0xB1-0xB5 flower, 0xB6-0xBA concentrate)
+common/ramp_store.c  the store (two copies) and every app command: stages, offset, mode, preset, ramp request
 common/ramp_presets.c built-in concentrate ramps and the setup offset
 common/ramp_picker.c preset picker state machine, shared by every device
-common/ramp_announce.c `0xBC` announcement after the `0xAA` reply, so the app can detect the patch
-aeris/ramp_event.c, sport/ramp_event.c   button-event hook: the picker, then stock
+common/ramp_announce.c `0xBC` announcement (after the `0xAA` reply, on changes, ramp start / end)
+aeris/ramp_event.c, sport/ramp_event.c   button-event hook: the mode gesture, the picker, then stock
 tools/hosttest/                              host tests: the shared code against a model of the stock firmware
 <device>/device.h    that device's confirmed addresses, each with the stock code that proves it
-carta2/ramp_display.c, carta2/ramp_input.c   Carta 2 screen and buttons
-aeris/ramp_led.c, sport/ramp_led.c           LED progress
-<device>/ramp_marker_entry.s                 the upload-marker hook
+carta2/ramp_display.c, carta2/ramp_input.c   Carta 2 screen; buttons and the power-on gesture
+tools/make_logo.py                           the Carta 2 logo (carta2/logo_strip.h)
+aeris/ramp_led.c, sport/ramp_led.c           LED progress, picker, mode-switch cue
+<device>/ramp_marker_entry.s                 the command (marker) hook
 <device>/apply_patch.py                      the patcher (patch table written by tools/build.py)
 tools/build.py                               build + verification
 ```
 
-| Device | Firmware build | Patch sites | Code / store sector |
+| Device | Firmware build | Patch sites | Code / store sectors |
 | --- | --- | --- | --- |
-| [`carta2/`](carta2/) | PROD-111224 | 33 | 0x30000 / 0xf0000 |
-| [`aeris/`](aeris/) | PROD-111224 | 5 | 0x14000 / 0x70000 |
-| [`sport/`](sport/) | PROD-030426 | 5 | 0x18000 / 0x70000 |
+| [`carta2/`](carta2/) | PROD-111224 | 33 | 0x30000 / 0xf0000-0xf1fff |
+| [`aeris/`](aeris/) | PROD-111224 | 5 | 0x14000 / 0x70000-0x71fff |
+| [`sport/`](sport/) | PROD-030426 | 5 | 0x18000 / 0x70000-0x71fff |
 
 ## History
 

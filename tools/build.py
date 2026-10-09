@@ -188,7 +188,7 @@ def main():
         check(dev_store is not None and int(dev_store.group(1), 16) == D['store'],
               f'device.h DEV_RAMP_FLASH is the store sector {D["store"]:#x}')
         check(D['store'] % 0x1000 == 0 and D['store'] >= 2 * D['bank'],
-              f'store sector {D["store"]:#x} lies outside both OTA banks (0..{2 * D["bank"]:#x})')
+              f'store sectors {D["store"]:#x} and {D["store"] + 0x1000:#x} lie outside both OTA banks (0..{2 * D["bank"]:#x})')
         ins, order, words = parse_dis(open(f'{work}/blob.dis').read())
         n, even = 0, []
         for i, x in enumerate(order):

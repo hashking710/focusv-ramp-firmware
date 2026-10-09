@@ -18,44 +18,80 @@
  */
 #include "ramp.h"
 
-/* RAMP_STORE_TOTAL throughout, not RAMP_STORE_SIZE: this reads/writes the
- * enabled-flag byte too (see ramp.h), so a save never clobbers it back to
- * erased. A store written by a version of this patch before that flag
- * existed reads it as 0xFF regardless -- NOR flash leaves anything past
- * what was actually written at its erased value -- so this needs no
- * migration: an old store is simply read as "enabled", the existing default. */
-/* The whole store into buf; a fresh one if the sector holds no store. */
-static void store_load(u8 *buf)
+/* ---- two copies -------------------------------------------------------------
+ * The store lives in two sectors (DEV_RAMP_FLASH, RAMP_STORE_ALT). A copy
+ * counts only if its magic is right and its commit byte reads 0x00; the
+ * commit byte is written last, after the rest of the copy, so a save cut
+ * short by a power loss -- erased sector, half the bytes, everything but the
+ * commit byte -- is simply not a copy, and the other one is still there. Of
+ * two complete copies the one with the newer sequence byte (wrapping) is
+ * current. A save always writes the copy that isn't current. */
+static u8 copy_ok(u32 a, u8 *seq)
 {
-    int i;
-    flash_read(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, buf);
-    if (buf[0] != (u8)RAMP_STORE_MAGIC || buf[1] != (u8)(RAMP_STORE_MAGIC >> 8)) {
-        for (i = 0; i < RAMP_STORE_TOTAL; i++)   /* first save, or an older layout */
-            buf[i] = 0xff;
-        buf[0] = (u8)RAMP_STORE_MAGIC;
-        buf[1] = (u8)(RAMP_STORE_MAGIC >> 8);
-    }
+    u8 b[2];
+    flash_read(a, 2, b);
+    if (b[0] != (u8)RAMP_STORE_MAGIC || b[1] != (u8)(RAMP_STORE_MAGIC >> 8))
+        return 0;
+    flash_read(a + RAMP_SEQ_OFFSET, 2, b);   /* seq, commit */
+    if (b[1] != 0)
+        return 0;
+    *seq = b[0];
+    return 1;
 }
 
-/* Writes buf back (NOR flash: erase the sector, then write) -- unless the
- * sector already holds exactly this, so repeated uploads, an unchanged picker
- * choice or the same offset cost no erase cycle and no power-loss window. */
+u32 ramp_store_addr(void)
+{
+    u8 s0 = 0, s1 = 0;
+    u8 ok0 = copy_ok(DEV_RAMP_FLASH, &s0), ok1 = copy_ok(RAMP_STORE_ALT, &s1);
+    if (ok0 && ok1)
+        return (u8)(s1 - s0) < 0x80 ? RAMP_STORE_ALT : DEV_RAMP_FLASH;
+    return ok1 ? RAMP_STORE_ALT : ok0 ? DEV_RAMP_FLASH : 0;
+}
+
+/* The whole current store into buf; a fresh one if there is none. */
+static void store_load(u8 *buf)
+{
+    u32 a = ramp_store_addr();
+    int i;
+    if (a) {
+        flash_read(a, RAMP_STORE_TOTAL, buf);
+        return;
+    }
+    for (i = 0; i < RAMP_STORE_TOTAL; i++)
+        buf[i] = 0xff;
+    buf[0] = (u8)RAMP_STORE_MAGIC;
+    buf[1] = (u8)(RAMP_STORE_MAGIC >> 8);
+}
+
+/* Writes buf as the new current copy -- unless the current copy already
+ * holds exactly this, so repeated uploads, an unchanged picker choice or the
+ * same offset cost no erase cycle. */
 static void store_commit(u8 *buf)
 {
     u8 cur[RAMP_STORE_TOTAL];
+    u8 zero = 0;
+    u32 a = ramp_store_addr(), dst = DEV_RAMP_FLASH;
     int i;
+
     buf[RAMP_VER_OFFSET] = RAMP_STORE_VERSION;
-    flash_read(DEV_RAMP_FLASH, RAMP_STORE_TOTAL, cur);
-    for (i = 0; i < RAMP_STORE_TOTAL; i++)
-        if (cur[i] != buf[i])
-            break;
-    if (i == RAMP_STORE_TOTAL)
-        return;
-    flash_erase(DEV_RAMP_FLASH);
-    for (i = 0; i < RAMP_STORE_TOTAL; i += DEV_FLASH_WRITE_MAX)   /* one page */
-        flash_write(DEV_RAMP_FLASH + i,
-                    RAMP_STORE_TOTAL - i < DEV_FLASH_WRITE_MAX ? RAMP_STORE_TOTAL - i : DEV_FLASH_WRITE_MAX,
+    buf[RAMP_SEQ_OFFSET] = 0;
+    if (a) {
+        flash_read(a, RAMP_STORE_TOTAL, cur);
+        for (i = 0; i < RAMP_SEQ_OFFSET; i++)
+            if (cur[i] != buf[i])
+                break;
+        if (i == RAMP_SEQ_OFFSET)
+            return;
+        buf[RAMP_SEQ_OFFSET] = (u8)(cur[RAMP_SEQ_OFFSET] + 1);
+        dst = (a == DEV_RAMP_FLASH) ? RAMP_STORE_ALT : DEV_RAMP_FLASH;
+    }
+    buf[RAMP_COMMIT_OFFSET] = 0xff;
+    flash_erase(dst);
+    for (i = 0; i < RAMP_COMMIT_OFFSET; i += DEV_FLASH_WRITE_MAX)   /* one page */
+        flash_write(dst + i,
+                    RAMP_COMMIT_OFFSET - i < DEV_FLASH_WRITE_MAX ? RAMP_COMMIT_OFFSET - i : DEV_FLASH_WRITE_MAX,
                     buf + i);
+    flash_write(dst + RAMP_COMMIT_OFFSET, 1, &zero);   /* the copy is complete only now */
 }
 
 static void save_waypoint(u8 bank, u8 slot, u16 f, u16 c, u16 hold)
@@ -82,16 +118,16 @@ static void save_waypoint(u8 bank, u8 slot, u16 f, u16 c, u16 hold)
     store_commit(buf);
 }
 
-/* One byte of the store, or 0xFF (erased) if the sector holds no store --
- * whatever else might be there is never read as a setting. */
+/* One byte of the current store, or 0xFF (erased) if there is none --
+ * whatever else might be in the sectors is never read as a setting. */
 static u8 store_byte(u8 off)
 {
-    u8 b[2];
-    flash_read(DEV_RAMP_FLASH, 2, b);
-    if (b[0] != (u8)RAMP_STORE_MAGIC || b[1] != (u8)(RAMP_STORE_MAGIC >> 8))
+    u32 a = ramp_store_addr();
+    u8 b;
+    if (!a)
         return 0xff;
-    flash_read(DEV_RAMP_FLASH + off, 1, b);
-    return b[0];
+    flash_read(a + off, 1, &b);
+    return b;
 }
 
 u8 ramp_enabled(void)

@@ -72,6 +72,7 @@
  * session log ring 0xcb000 + (n % 28) * 0x1000 up to 0xe6fff (0x64ae), SDK
  * MAC / calibration 0xff000 / 0xfe000 (.data). 0xe7000-0xfdfff is unused.
  * Code and the logo image get 0x30000-0x34fff. */
+/* Two sectors: 0xf0000 and 0xf1000 (RAMP_STORE_ALT), one copy each. */
 #define DEV_RAMP_FLASH      0xf0000
 #define DEV_FLASH_READ      0x9c0
 #define DEV_FLASH_ERASE     0x924

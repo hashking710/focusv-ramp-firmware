@@ -30,7 +30,8 @@ unsigned char sim_state[1024] __attribute__((aligned(8)));
 
 unsigned int sim_systick;
 int sim_picker_closed;
-static unsigned char flash[0x1000];
+static unsigned char flash[0x2000];   /* both store copies: DEV_RAMP_FLASH, RAMP_STORE_ALT */
+static int power_ops = -1;           /* >= 0: flash operations left before a power cut */
 static int erases, never_reach;
 static int carta_timing;     /* 1: free-running clock (no device; give-back path) */
 int sim_clock_waits;         /* !carta_timing, as the device.h macro sees it */
@@ -51,11 +52,14 @@ static void set16(unsigned char *b, int off, int v) { b[off] = (unsigned char)v;
 short sim_div(int a, int b) { return (short)(a / b); }
 
 void sim_flash_read(int addr, int len, void *buf) { memcpy(buf, flash + (addr - DEV_RAMP_FLASH), len); }
-void sim_flash_erase(int addr) { erases++; memset(flash + (addr - DEV_RAMP_FLASH), 0xff, 0x1000); }
+static int powered(void) { if (power_ops < 0) return 1; if (power_ops == 0) return 0; power_ops--; return 1; }
+void sim_flash_erase(int addr) { if (!powered()) return; erases++; memset(flash + (addr - DEV_RAMP_FLASH), 0xff, 0x1000); }
 static int write_too_long;
 void sim_flash_write(int addr, int len, void *buf)
 {
     int i;
+    if (!powered())
+        return;
     if (len > DEV_FLASH_WRITE_MAX)
         write_too_long++;
     for (i = 0; i < len; i++)   /* NOR: a write can only clear bits */
@@ -115,6 +119,7 @@ static void reset_device(int carta)
     memset(sim_cue, 0, sizeof sim_cue);
     memset(sim_state, 0xa7, sizeof sim_state);      /* power-on garbage */
     memset(flash, 0xff, sizeof flash);
+    power_ops = -1;
     carta_timing = carta;
     sim_clock_waits = !carta;
     sim_struct[0x04] = 0;   /* F scale */
@@ -124,6 +129,9 @@ static void reset_device(int carta)
 }
 
 static volatile ramp_state_t *ST(void) { return RAMP_STATE; }
+
+/* the current store copy, as the patch reads it */
+static unsigned char *cur(void) { u32 a = ramp_store_addr(); return flash + (a ? a - DEV_RAMP_FLASH : 0); }
 
 static void tick(void) { tick_no++; sim_systick += 16000000u / TPS; ramp_trampoline(); }
 
@@ -507,7 +515,7 @@ static void t_stock_mode(void)
 
     ramp_marker_dispatch(RAMP_MODE_MARKER, RAMP_MODE_STOCK);
     CHECK(ramp_stock_mode() && ST()->stock_mode == 1, "not in stock mode");
-    CHECK(flash[RAMP_MODE_OFFSET] == RAMP_MODE_STOCK, "mode byte %#x", flash[RAMP_MODE_OFFSET]);
+    CHECK(cur()[RAMP_MODE_OFFSET] == RAMP_MODE_STOCK, "mode byte %#x", cur()[RAMP_MODE_OFFSET]);
     tick();
     CHECK(last_pkt[0] == 0xbc && last_pkt[8] == 0x03, "the switch should announce stock mode at once: flags %#x", last_pkt[8]);
 
@@ -529,7 +537,7 @@ static void t_stock_mode(void)
     ramp_marker_dispatch(RAMP_MODE_MARKER, 0x00);                  /* not a mode code: ignored */
     CHECK(ramp_stock_mode(), "an unknown code changed the mode");
     ramp_marker_dispatch(RAMP_MODE_MARKER, RAMP_MODE_RAMP);
-    CHECK(!ramp_stock_mode() && flash[RAMP_MODE_OFFSET] == 0xff, "not back in ramp mode");
+    CHECK(!ramp_stock_mode() && cur()[RAMP_MODE_OFFSET] == 0xff, "not back in ramp mode");
     start_session(1, 150, 65, 30);
     r = run_to_end(300);
     CHECK(r.stages_seen == 1 && r.stage_temp[1] == 430, "the saved ramp didn't survive stock mode: %d stages", r.stages_seen);
@@ -550,7 +558,35 @@ static void t_stock_mode(void)
     tick();
     CHECK(ramp_active(ST()), "ramp didn't arm");
     ramp_marker_dispatch(RAMP_MODE_MARKER, RAMP_MODE_STOCK);
-    CHECK(!ramp_stock_mode() && flash[RAMP_MODE_OFFSET] == 0xff, "switched mid-ramp");
+    CHECK(!ramp_stock_mode() && cur()[RAMP_MODE_OFFSET] == 0xff, "switched mid-ramp");
+}
+
+static void t_power_cut(void)
+{
+    struct run r;
+    int n, done = 0;
+    printf("a power cut at any point of a save leaves the old store or the new one, never none\n");
+    for (n = 0; n < 12 && !done; n++) {
+        int ofs;
+        reset_device(0);
+        tick();
+        upload(1, 1, 430, 221, 12);
+        ramp_marker_dispatch(RAMP_OFFSET_MARKER, 5);
+        ramp_marker_dispatch(RAMP_OFFSET_MARKER, 6);   /* both copies in use */
+        power_ops = n;                                  /* the cut */
+        ramp_marker_dispatch(RAMP_OFFSET_MARKER, 9);
+        done = power_ops > 0;                           /* the save finished before the cut */
+        power_ops = -1;                                 /* power back */
+        memset(sim_state, 0xa7, sizeof sim_state);
+        tick();
+        ofs = ramp_offset();
+        CHECK(ofs == 6 || ofs == 9, "after a cut at operation %d the offset reads %d", n, ofs);
+        CHECK(n < 5 || done || ofs == 9, "cut at %d: a complete save was lost", n);
+        start_session(1, 150, 65, 30);
+        r = run_to_end(300);
+        CHECK(r.stages_seen == 1 && r.stage_temp[1] == 430, "cut at %d: the saved ramp is gone (%d stages)", n, r.stages_seen);
+    }
+    CHECK(done, "the save never completed");
 }
 
 static void t_rank_change(void)
@@ -583,7 +619,7 @@ static void t_foreign_sector(void)
     printf("a store sector holding something else reads as erased, and the first save replaces it\n");
     reset_device(0);
     memset(flash, 0x00, sizeof flash);   /* no magic; every byte a would-be setting */
-    flash[RAMP_MODE_OFFSET] = RAMP_MODE_STOCK;
+    cur()[RAMP_MODE_OFFSET] = RAMP_MODE_STOCK;
     tick();
     CHECK(ramp_enabled() && ramp_selected() == RAMP_DEFAULT_PRESET && ramp_offset() == 0 && !ramp_stock_mode(),
           "read a setting from a foreign sector: en %d sel %d ofs %d stock %d",
@@ -592,7 +628,7 @@ static void t_foreign_sector(void)
     r = run_to_end(300);
     CHECK(r.stages_seen == 4, "default preset didn't run: %d stages", r.stages_seen);
     ramp_marker_dispatch(RAMP_OFFSET_MARKER, 5);
-    CHECK(u16at(flash, 0) == RAMP_STORE_MAGIC && ramp_offset() == 5 && ramp_enabled(), "first save didn't make a clean store");
+    CHECK(u16at(cur(), 0) == RAMP_STORE_MAGIC && ramp_offset() == 5 && ramp_enabled(), "first save didn't make a clean store");
 }
 
 static void t_picker_timeout(void)
@@ -620,7 +656,7 @@ static void t_flash_writes(void)
     tick();
     st = ST();
     upload(1, 1, 430, 221, 12);
-    CHECK(erases == 1 && flash[RAMP_VER_OFFSET] == RAMP_STORE_VERSION, "erases %d version %d", erases, flash[RAMP_VER_OFFSET]);
+    CHECK(erases == 1 && cur()[RAMP_VER_OFFSET] == RAMP_STORE_VERSION, "erases %d version %d", erases, cur()[RAMP_VER_OFFSET]);
     upload(1, 1, 430, 221, 12);
     CHECK(erases == 1, "re-upload erased again (%d)", erases);
     ramp_marker_dispatch(RAMP_OFFSET_MARKER, 5);
@@ -657,6 +693,7 @@ int main(void)
     t_stock_mode();
     t_foreign_sector();
     t_rank_change();
+    t_power_cut();
     t_picker_timeout();
     t_flash_writes();
     CHECK(write_too_long == 0, "%d flash writes longer than DEV_FLASH_WRITE_MAX", write_too_long);

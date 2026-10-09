@@ -134,8 +134,15 @@ typedef void (*flash_write_fn)(int addr, int len, void *buf);
 #define RAMP_OFS_OFFSET      (RAMP_STORE_SIZE + 2)   /* setup offset, signed F */
 #define RAMP_VER_OFFSET      (RAMP_STORE_SIZE + 3)   /* store layout version */
 #define RAMP_MODE_OFFSET     (RAMP_STORE_SIZE + 4)   /* RAMP_MODE_STOCK, or anything else = ramp mode */
-#define RAMP_STORE_TOTAL     (RAMP_STORE_SIZE + 5)
-#define RAMP_STORE_VERSION   2                       /* 0xFF (erased) = written before versions */
+#define RAMP_SEQ_OFFSET      (RAMP_STORE_SIZE + 5)   /* which copy is newer (wrapping) */
+#define RAMP_COMMIT_OFFSET   (RAMP_STORE_SIZE + 6)   /* 0x00 = complete: written last */
+#define RAMP_STORE_TOTAL     (RAMP_STORE_SIZE + 7)
+#define RAMP_STORE_VERSION   3
+/* Two copies, in DEV_RAMP_FLASH and the sector after it. A save writes the
+ * one that isn't current, commit byte last, so a power cut at any point
+ * leaves either the old store or the new one complete (ramp_store.c). */
+#define RAMP_STORE_ALT       (DEV_RAMP_FLASH + 0x1000)
+u32 ramp_store_addr(void);   /* the current copy's sector, or 0 if there is none */
 /* The Carta 2 (0x964) and Aeris (0xa5c) page program doesn't split at 256-byte
  * page boundaries, so the whole store must stay inside the sector's first page. */
 typedef char ramp_store_fits_one_page[(RAMP_STORE_TOTAL <= 256) ? 1 : -1];

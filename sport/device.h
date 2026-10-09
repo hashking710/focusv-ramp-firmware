@@ -74,6 +74,7 @@
  * 0x60fff (0x4dc2), SDK pairing / MAC / calibration from 0x74000 (.data
  * 0x2654 / 0x264c / 0x2650). 0x61000-0x73fff is unused. Code gets
  * 0x18000-0x1afff. */
+/* Two sectors: 0x70000 and 0x71000 (RAMP_STORE_ALT), one copy each. */
 #define DEV_RAMP_FLASH      0x70000
 #define DEV_FLASH_READ      0xc0cc
 #define DEV_FLASH_ERASE     0xc178

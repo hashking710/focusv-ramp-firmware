@@ -31,7 +31,7 @@ void ramp_event_entry(void);
 #define H 240
 static unsigned short fb[H][W];
 static int oob, prims, fails;
-static unsigned char flash_store[0x1000];
+static unsigned char flash_store[0x2000];   /* both store copies */
 
 #define CHECK(c, ...) do { if (!(c)) { fails++; printf("  FAIL %s:%d ", __FILE__, __LINE__); printf(__VA_ARGS__); printf("\n"); } } while (0)
 
@@ -108,7 +108,7 @@ static void s_lcd_data(u8 b)
 static void s_noop(void) {}
 static short s_div(int a, int b) { return (short)(a / b); }
 static void s_flash_read(int addr, int len, void *buf) { memcpy(buf, flash_store + (addr - DEV_RAMP_FLASH), len); }
-static void s_flash_erase(int addr) { memset(flash_store + (addr - DEV_RAMP_FLASH), 0xff, sizeof flash_store); }
+static void s_flash_erase(int addr) { memset(flash_store + (addr - DEV_RAMP_FLASH), 0xff, 0x1000); }
 static void s_flash_write(int addr, int len, void *buf)
 {
     int i;

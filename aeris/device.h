@@ -64,6 +64,7 @@
  * session log ring 0x45000 + (n % 28) * 0x1000 up to 0x60fff (0x573a), SDK
  * pairing 0x74000 and MAC / calibration 0xff000 / 0xfe000 (.data). 0x61000-
  * 0x73fff is unused. Code gets 0x14000-0x16fff. */
+/* Two sectors: 0x70000 and 0x71000 (RAMP_STORE_ALT), one copy each. */
 #define DEV_RAMP_FLASH      0x70000
 #define DEV_FLASH_READ      0xab8
 #define DEV_FLASH_ERASE     0xa1c

@@ -124,9 +124,10 @@ static u8 load_stages(volatile ramp_state_t *st, u8 bank)
     u16 *w = buf + 1 + bank * RAMP_NUM_SLOTS * 3;
     u8 n = 0, i, k;
 
-    flash_read(DEV_RAMP_FLASH, RAMP_STORE_SIZE, buf);
-    if (buf[0] != RAMP_STORE_MAGIC)
+    u32 a = ramp_store_addr();
+    if (!a)
         return 0;
+    flash_read(a, RAMP_STORE_SIZE, buf);
     while (n < RAMP_NUM_SLOTS) {
         u16 h = w[n * 3 + 2];
         if (h == 0 || h == 0xffff)

@@ -89,6 +89,9 @@
  * (the power-on transition); the picker honours the same gate. */
 #define DEV_EV_IGNORED()    ((*(volatile u8 *)(0x84308c + 7)) != 0 && (*(volatile u8 *)(0x84308c + 9)) == 1)
 #define DEV_IDLE()          ((*(volatile u8 *)DEV_UI_STATE_ADDR) == 1 && STRUCT_BASE[OFF_SESSION] == 0)
+/* UI state 7 is the cleaning cycle: the orchestrator (0x81aa -> 0x85ac) forces
+ * its own 80 C / 176 F target. A sentinel slot must not turn it into a ramp. */
+#define DEV_ARM_BLOCKED()   ((*(volatile u8 *)DEV_UI_STATE_ADDR) == 7)
 
 
 struct ramp_state_s;

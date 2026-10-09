@@ -51,8 +51,8 @@ the patch.
 
 ## Preset picker and on/off
 
-From the idle state (no session), **hold the button** (a single press, held about 2 s) to open the
-picker. A hold that ends a multi-press gesture (two presses + hold, four presses + hold for dim mode,
+From the idle state (no session), with the LEDs on, **hold the button** (a single press, held until
+the stock long hold registers: 200 button scans) to open the picker. A hold that ends a multi-press gesture (two presses + hold, four presses + hold for dim mode,
 seven presses + hold) stays the stock gesture. Inside it:
 
 - **single click**: next built-in preset (Flavor first, Rosin, Balanced, Sauce; Balanced by default).
@@ -64,16 +64,20 @@ seven presses + hold) stays the stock gesture. Inside it:
 
 The picker opens even when the system is off, so it can be switched back on. While the system is
 off, no ramp arms and no stage or offset is saved. The picker closes, passing the event on, as soon
-as the device leaves the idle state (sleep, a session), and the app's start / stop / +10 s commands
-always reach the stock code. The events it takes reach the stock handler only as a plain press,
+as the device leaves the idle state (sleep, standby, a session). Power off (five presses, the app's
+power-off command, the firmware's own sleep request -- all event 11) and the app's start / stop /
++10 s commands always reach the stock code. The events it takes reach the stock handler only as a plain press,
 which still counts as activity for the auto-off timer, so the stock gestures are unchanged outside
 it: a click cycles the temperature preset, a triple
 click cycles the LED preset, four clicks show the battery. In the idle state a stock hold does
 nothing (it only stops a running session), so the picker's hold doesn't shadow a stock gesture.
 
 Like stock, the picker ignores button events during the power-on transition (struct `+8` set and
-`+10` == 1, which the stock consumer also checks). It follows the LED setting: with LEDs off, the
-picker still works but shows nothing.
+`+10` == 1, which the stock consumer also checks). With the LEDs off it doesn't open at all: it
+would be an invisible mode taking clicks for up to 30 s. Turn the LEDs on (triple click) to use it.
+
+**Cleaning cycle.** Two presses + a long hold from sleep starts the stock cleaning cycle (UI state
+7, a session at a forced 90 °C / 193 °F). It never arms a ramp, even from a sentinel slot.
 
 **The button light.** During a ramp it shows the same temperature colour as the LEDs (blue at
 the coolest stage through to gold at the hottest); in the picker, the preset's colour, or red when the
@@ -83,10 +87,12 @@ push runs button (`0x8efc`, which waits for its own transfer), LED rail PA0 on, 
 doesn't wait) -- and so does the patch, from one place: the call of the stock LED effect dispatcher
 (`0x8ff8`, one caller at `0x57ee`, every 10 ms main-loop tick). While a ramp or the picker owns the
 lights, it fills and pushes both instead of running the stock effects; otherwise the dispatcher
-runs unchanged, which also restores the stock colours. A stock cue (the three blinks at session
-start, a fade) always plays out first: the dispatcher's animation state at `0x844b3c` (+1 level,
-+5 blinks, +6 fade-in, +7 fade-out) must be idle at level 100 before the patch draws, so it never
-freezes the level mid-blink. Both lights follow the LED setting: with LEDs off, the stock effects
+runs unchanged, which also restores the stock colours. A stock cue or warning always plays out
+first: the dispatcher's animation state at `0x844b3c` (+1 level, +5 blinks, +6 fade-in, +7
+fade-out) must be idle at level 100, and its effect (+0) must not be 9, the warning flash (low
+battery at session start, heater faults), before the patch draws -- so it never freezes the level
+mid-blink or hides a warning. Nothing else in the image writes those fields, so this holds the
+lights for a second or two at most: the three blinks at every session start, then the ramp. Both lights follow the LED setting: with LEDs off, the stock effects
 keep both.
 
 ## Device-specific behaviour, confirmed from the code that uses it

@@ -94,6 +94,13 @@
  * posts 18 / 19 / 20 for the app's A5 / AF / 66 markers (start, stop, +10 s). */
 #define DEV_EV_CLICKS()     (*(volatile u8 *)(0x842694 + 0x20))
 #define DEV_EV_APP_MIN      18
+/* 11 is power off / sleep: five presses, but also posted by the app's power-off
+ * command (0xCC handler, 0xb300) and re-posted from 0x844baa by 0x4934 -- the
+ * picker never takes it. */
+#define DEV_EV_POWER_OFF    11
+/* The user's LED preset, 0 = off (cycled by event 9 in the consumer). With it
+ * off the picker doesn't open: it would be an invisible mode taking clicks. */
+#define DEV_LEDS_ON()       (*(volatile u8 *)(0x842694 + 0x0f))
 /* The consumer's prelude, run for every pending event, resets the idle
  * auto-off timer (+0x42) and refreshes 0x842910+0x20. Events the picker takes
  * are handed on as 16 (a press), which state 1 ignores, so that still runs. */
@@ -111,6 +118,12 @@
  * (the power-on transition); the picker honours the same gate. */
 #define DEV_EV_IGNORED()    ((*(volatile u8 *)(0x842694 + 8)) != 0 && (*(volatile u8 *)(0x842694 + 10)) == 1)
 #define DEV_IDLE()          ((*(volatile u8 *)DEV_UI_STATE_ADDR) == 1 && STRUCT_BASE[OFF_SESSION] == 0)
+/* UI state 7 is the cleaning cycle (two presses + a long hold from sleep,
+ * consumer 0x4778 -> session start 0x6c30): the orchestrator forces its own
+ * 90 C / 193 F target and the first reach zeroes the countdown. A sentinel
+ * slot must not turn it into a ramp -- it would take over the countdown, end
+ * the cycle early and could count it as a dab. */
+#define DEV_ARM_BLOCKED()   ((*(volatile u8 *)DEV_UI_STATE_ADDR) == 7)
 
 
 void ramp_led_tick(void);

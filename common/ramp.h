@@ -274,6 +274,11 @@ void ramp_toggle_enabled(void);
 u8   ramp_default_stages(volatile ramp_state_t *st, u8 sel);
 void ramp_announce_tick(volatile ramp_state_t *st);
 void ramp_picker_close(volatile ramp_state_t *st);
+/* A device state in which a sentinel session must stay a stock session (Sport:
+ * its cleaning cycle). */
+#ifndef DEV_ARM_BLOCKED
+#define DEV_ARM_BLOCKED()    0
+#endif
 #ifndef DEV_PICKER_CLOSED
 #define DEV_PICKER_CLOSED()  ((void)0)   /* Carta 2: redraw the stock idle screen */
 #endif

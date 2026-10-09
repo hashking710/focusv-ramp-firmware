@@ -119,7 +119,7 @@ static void try_arm(volatile ramp_state_t *st)
     u16 total = 0;
     u8 i, n;
 
-    if (rank > RAMP_MAX_RANK)
+    if (rank > RAMP_MAX_RANK || DEV_ARM_BLOCKED())
         return;
     f = *PRESET(bank ? TBL_CO_F : TBL_FL_F, rank);
     c = *PRESET(bank ? TBL_CO_C : TBL_FL_C, rank);

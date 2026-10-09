@@ -28,19 +28,24 @@
  */
 #include "ramp.h"
 
-#define LED_ENABLED      (*(volatile u8 *)(0x842694 + 0x0f))
+#define LED_ENABLED      DEV_LEDS_ON()
 #define LED_RGB          ((volatile u8 *)0x8427f8)   /* 5 x (R,G,B) */
 #define LED_COUNT        5
 #define led_push         STOCK_FN(void_fn, 0x8cf8)
 
 /* The stock dispatcher's animation state (FUN_00008ff8, read from its code):
- * +1 the level every push is scaled by (0-100), +5 blinks still to play (20
- * dispatcher passes on, 20 off -- 3 are queued at every session start), +6 a
- * fade-in, +7 a fade-out. With nothing queued it sets the level back to 100
- * on its next pass. While any of that is running the lights stay stock's, so
- * its cues play out and this file never freezes the level mid-blink (it only
- * moves while the dispatcher runs). */
+ * +0 the effect, +1 the level every push is scaled by (0-100), +5 blinks still
+ * to play (20 dispatcher passes on, 20 off -- 3 are queued at every session
+ * start, 0x6cf0), +6 a fade-in, +7 a fade-out. With nothing queued it sets
+ * the level back to 100 on its next pass. Effect 9 is the warning flash: +4
+ * flashes (25 passes on, 25 off), then effect 0 -- low battery at session
+ * start (0x6c30), heater faults, the dim-mode toggle. While any of that is
+ * running the lights stay stock's, so its cues and warnings play out and this
+ * file never freezes the level mid-blink (it only moves while the dispatcher
+ * runs). Across the whole image nothing else writes +1/+5/+6/+7, so none of
+ * this can hold the lights for more than a couple of seconds. */
 #define LED_ANIM         ((volatile u8 *)0x844b3c)
+#define LED_EFFECT_FLASH 9
 #define BTN_R            (*(volatile u16 *)0x844b12)
 #define BTN_G            (*(volatile u16 *)0x844b0c)
 #define BTN_B            (*(volatile u16 *)0x844b0e)
@@ -54,7 +59,8 @@ static const u8 STOP_B[5] = { 255, 230, 160,  60,  60 };
 
 static u8 stock_animating(void)
 {
-    return LED_ANIM[5] || LED_ANIM[6] || LED_ANIM[7] || LED_ANIM[1] < 100;
+    return LED_ANIM[5] || LED_ANIM[6] || LED_ANIM[7] || LED_ANIM[1] < 100 ||
+           LED_ANIM[0] == LED_EFFECT_FLASH;
 }
 
 /* Preset picker: one LED per preset position, lit up to the chosen preset in

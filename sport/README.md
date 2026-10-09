@@ -105,7 +105,7 @@ system is off. It's one more addressable RGB LED, sent by `0x8efc` from `0x844b1
 (red, green, blue). The button and the ring share one PWM output and one DMA buffer, so every stock
 push runs button (`0x8efc`, which waits for its own transfer), LED rail PA0 on, ring (`0x8cf8`, which
 doesn't wait) -- and so does the patch, from one place: the call of the stock LED effect dispatcher
-(`0x8ff8`, one caller at `0x57ee`, every 10 ms main-loop tick). While a ramp or the picker owns the
+(`0x8ff8`, one caller at `0x57ee`, every other 10 ms main-loop pass: 50 Hz). While a ramp or the picker owns the
 lights, it fills and pushes both instead of running the stock effects; otherwise the dispatcher
 runs unchanged, which also restores the stock colours. A stock cue or warning always plays out
 first: the dispatcher's animation state at `0x844b3c` (+1 level, +5 blinks, +6 fade-in, +7
@@ -135,8 +135,8 @@ keep both.
 
 Every address in [`device.h`](device.h) is listed with the stock code that proves what it means.
 
-**Flash use, from every stock erase call:** settings at 0x40000–0x43fff, pairing at 0x74000+, and
-the OTA writes the other bank (0x20000 or 0) -- nothing stock touches 0x18000–0x1afff. The store
-address is physical: running from bank 0 it is the image's own erased sector; after an OTA that
-lands in bank 1 (0x20000) it is that sector of the now-inactive bank 0, which the next OTA erases.
-Either way a ramp starts from a fresh or an older store, both checked before use.
+**Flash use, from every stock erase call (see [`device.h`](device.h)):** the two OTA banks
+(0x0-0x3ffff; stock erases the one it isn't running from at every boot), settings at
+0x40000-0x43fff, the session log ring at 0x45000-0x60fff, and the SDK's pairing, MAC and
+calibration from 0x74000. The ramp store's two sectors, 0x70000 and 0x71000, are in the gap no
+stock code touches (0x61000-0x73fff), so they hold whichever bank the image runs from.

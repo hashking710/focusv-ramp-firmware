@@ -102,7 +102,7 @@ session at a forced 80 °C / 176 °F that runs until a press stops it). It never
 the coolest stage through to gold at the hottest); in the picker, the preset's colour, or red when the
 system is off. It's an RGB LED on PB5/PB6/PB7 driven by a software-PWM timer interrupt (`0x49c`)
 from three duty values, 0-100 (`0x845602` red, `0x8455fc` green, `0x8455fe` blue). The stock LED
-effect dispatcher (`0x920c`, one caller at `0x61ae`, every main-loop tick) normally sets both
+effect dispatcher (`0x920c`, one caller at `0x61ae`, every other 10 ms main-loop pass: 50 Hz) normally sets both
 lights; the patch wraps that call. While a ramp or the picker owns the lights, it fills both, sets
 the LED power bit the dispatcher sets after every push (the pin at `0x84317c`, chosen at boot) and
 pushes the ring (`0x90bc`) itself, from that one place, instead of running the stock effects.
@@ -128,32 +128,20 @@ Every address in [`device.h`](device.h) is listed with the stock code that prove
 
 ## Reverting, and OTA compatibility
 
-Traced directly -- the BLE attribute table (by the OTA characteristic's own UUID), its write
-handler, and cross-checked against `terpline-web`'s own OTA client (`lib/protocol/ota.ts`), the
-real consumer of this wire format:
+The Aeris, like the Sport and the Carta 2, updates over two banks (`main()` sets them with
+`bls_ota_set_fwSize_and_fwBootAddr(124, 0x20000)`: images at 0x0 and 0x20000). Traced on the Sport's
+copy of the same SDK code:
 
-- **The write base is flash address 0, confirmed, not inferred.** The app's `BEGIN`/block/`FINISH`
-  commands carry no address or bank field at all -- just a sequential block index starting at 0,
-  covering the file from its own byte 0 (header included). The firmware writes block `i` to
-  `i * 16 + base`; for the file's first bytes to land where the header actually lives, `base` must
-  be 0. There is no separate staging bank: an OTA update overwrites flash in place, sequentially,
-  from the start.
-- **The stock OTA write path is completely separate from this patch** regardless: it lives at
-  0x116cc-0x1354c -- the attribute table, the write handler, its CRC check -- entirely below this
-  patch's own code at 0x14000+, with the stock image's real end (0x13b2c) in between. This patch
-  touches none of it.
-- **A real update of the stock file never even reaches this patch's flash region.** Writing
-  sequentially from 0, an 80,684-byte stock image stops at 0x13b2c -- short of 0x14000. This
-  patch's own code and waypoint store are left untouched, not overwritten.
-- **Reverting is confirmed by the two patch sites, not by this patch's own flash region.** The
-  patch changes behaviour only through its 2 call-site swaps (0x6464, 0xb490), both well before
-  0x14000 in write order. Any OTA update of a real stock image writes over them within the first
-  quarter of the transfer, restoring stock bytes there long before the transfer finishes -- whether
-  it completes or not. Once that's true, nothing on the device calls into this patch's code again.
-- **The transfer protects itself against a lost connection.** Writing block 0 deliberately corrupts
-  its own copy of the "KNLT" magic byte (forces it to 0xFF); only `FINISH` restores it. An update
-  that fails partway leaves an image with an invalid header -- recognized as such on the next boot,
-  not run as if it were a complete one. This is a stock safety mechanism, unrelated to this patch
-  and unaffected by it.
+- **An OTA writes the bank the device isn't running from**, never the running one: each 16-byte
+  block goes to the other bank's base plus its offset (the app's packets carry only a block index;
+  the device adds the bank). The image's boot flag (the "K" of "KNLT" at byte 8) is held at 0xFF
+  while it's written.
+- **Only a complete, verified transfer switches.** At the end the new bank's flag is written and
+  the old one's cleared, then the device reboots into the new image. A transfer that fails partway
+  never gets a valid flag, so the device keeps booting the image it was running.
+- **The bank left behind is wiped at the next boot** (the SDK's own clear, and the app's wipe loops
+  0x6004 / 0x637a / 0x692e), which is why the ramp store lives outside both banks (0x70000 /
+  0x71000). Stock never touches those sectors, so after a revert they simply sit unused.
 
-Flashing the original stock file back, over OTA or any other method, is a full, working revert.
+Flashing the original stock file back, over OTA or SWire, is a full, working revert: it becomes the
+running image, and the patched one is wiped from the other bank at the next boot.

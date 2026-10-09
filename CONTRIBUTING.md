@@ -28,8 +28,13 @@ a wrong address, or a right address with the wrong meaning, ends up in a merged 
 2. Calls into stock code go through `STOCK_FN` (disassembly address + 0x28, bit 0 set). Decompile any
    stock primitive before relying on its argument format.
 3. `tools/build.py <device> --firmware <file>` must report **ALL CHECKS PASSED**, unchanged — it
-   regenerates the patch table, the blob hash and runs the end-to-end and refusal checks.
-4. State in the PR, plainly, what's confirmed vs. inferred, and whether it ran on hardware. A PR that
+   regenerates the patch table, the blob hash and runs the end-to-end and refusal checks. The host
+   tests (`sh tools/hosttest/run.sh`) and, for the Carta 2, the screen test
+   (`sh tools/hosttest/run_display.sh <your stock file>`) must pass too; add a test that fails
+   without your change when it fixes behaviour.
+4. Add or update the row in [`VERIFICATION.md`](VERIFICATION.md): traced (with the address), host
+   test, or hardware.
+5. State in the PR, plainly, what's confirmed vs. inferred, and whether it ran on hardware. A PR that
    says "I believe this is right but haven't verified X" is far safer to review than one that rounds
    up to "confirmed."
 

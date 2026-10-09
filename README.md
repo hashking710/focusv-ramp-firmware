@@ -89,14 +89,21 @@ by, or sponsored by Focus V.
 - **Waypoints are validated before arming.** They're read through the stock flash routine into
   RAM when a ramp arms. Every stage must fall within the official app's limits (flower
   275–500 °F, concentrate 365 °F up to the device's ceiling, at most 300 s per stage), with its °F
-  and °C values agreeing. Anything else means no ramp, just a stock session. A running ramp works
-  from its RAM copy, so a new upload can't change it mid-session.
+  and °C values agreeing. Anything else means no ramp: a session started from a trigger slot runs
+  as a stock session, one the app asked to run as a ramp is stopped. A running ramp works from its
+  RAM copy, so a new upload can't change it mid-session.
 - **Ramp state is checked.** It's checked every tick, and a preset slot is only ever restored from
   state the patch provably wrote. That covers a reboot mid-ramp, or uninitialised RAM that happens
   to look valid.
-- **Nothing temporary is saved to flash.** The patch never changes a preset's hold time. The stock
-  save that persists the dab counter is triggered only after the preset slot has its own values
-  back, so a ramp's temporary stage temperature can never be written to flash.
+- **Nothing temporary is saved to flash.** The patch never changes a preset's hold time. A stock
+  settings save that comes due while a ramp runs is held, and the save that persists the dab
+  counter is triggered only after the preset slot has its own values back, so a ramp's temporary
+  stage temperature can never be written to flash -- not even by powering off mid-ramp (stock
+  stops the session first, and the slot is restored in the same pass).
+- **The store survives power loss.** It's kept as two copies; a save writes the older one and marks
+  it complete last, so a power cut at any moment leaves the old store or the new one.
+- **App requests expire.** A ramp request the device didn't act on lapses after 3 s, so it can't
+  turn a later session into a ramp.
 - **Stale stages are cleared.** Uploading stage 1 clears that mode's stages 2–5, so a shorter ramp
   can never inherit stages from an older, longer one.
 
@@ -198,6 +205,16 @@ The same audits also found:
 
 All of these are fixed, and `tools/build.py` now checks for each class of mistake on every build.
 No one is known to have flashed any earlier version.
+
+Later audits, all fixed (the details are in [`VERIFICATION.md`](VERIFICATION.md)):
+
+- The store sat inside an OTA bank, which stock wipes at every boot when it isn't running from it.
+- A stock settings save that came due mid-ramp could write a stage temperature into a preset.
+- Carta 2: the flash write verifies into a 64-byte stack buffer; the 66-byte store overran it.
+- A power cut during a save could empty the store (now two copies, commit byte last).
+- Another app changing the preset mid-ramp left the ramp writing a slot nobody used.
+- A request the device didn't act on came back every 268 s (the system tick wrapping).
+- Terpline's stop rewrote the custom presets; its panel couldn't tell when a ramp ended.
 
 ## Reverting
 

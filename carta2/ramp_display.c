@@ -481,7 +481,7 @@ void ramp_ce70_hide(void)
     if (ramp_active(st))
         return;
     orig_ce70();
-    if (st->picker_on && STRUCT_BASE[OFF_SCREEN] == 0)
+    if (st->picker_on && DEV_HOME_SCREEN(STRUCT_BASE[OFF_SCREEN]))
         ramp_picker_draw(st->picker_sel, st->picker_enabled);
 }
 void ramp_cf58_hide(void) { if (!ramp_active(RAMP_STATE)) orig_cf58(); }

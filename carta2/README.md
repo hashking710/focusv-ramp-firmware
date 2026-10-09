@@ -80,30 +80,37 @@ Outside a ramp, every event goes to the stock consumer unchanged.
 
 ## Preset picker and on/off
 
-From the idle screen, with no session, **hold −** to open the picker. A box over the stock target
-line shows the selected preset's number and a row of six markers. Inside it:
+With no session, from home, **hold −** to open the picker. A box over the stock target line shows
+the selected preset's number and a row of six markers. Inside it:
 
 - **+ / −**: next / previous built-in preset;
 - **double click**: switch the ramp system on or off -- with it off, the number and the selected
   marker turn orange;
-- **click**: leave, saving the choice in flash. The stock idle screen is redrawn.
+- **click**: leave, saving the choice in flash. Stock home is redrawn.
 
-The box is redrawn on every change, from the event hook, and again whenever stock redraws the idle
-screen. The picker opens even when the system is off, so it can be switched back on; while off, no
-ramp arms and no stage or offset is saved. It closes, passing the event on, as soon as the screen
-leaves idle. Five clicks (power on / off) and the app's start / stop / +10 s always reach the stock
-code.
+**Where it opens.** The Carta 2 has two stock heat modes, switched by four clicks (`+0x82`):
 
-> [!WARNING]
-> **Known issue -- the picker's entry point needs a Carta 2 pass.** The picker treats screen 0 as
-> idle, but in the stock consumer's screen table (pointer `0x1a3c0`, a runtime address: the table is
-> at disassembly `0x1a398`) screen 0 is the off / sleep state -- it only handles five clicks (power
-> on), the press event and two system events. The home screen is 4 / 14, and depending on a saved
-> setting (`+0x82`) a press there either starts a session at once or moves to menu screen 12, so a
-> held − never arrives on home either. As built, the picker can only open while the screen is off,
-> where it's invisible. It can't block power-on (five clicks always pass), but it doesn't work as
-> described above until it's redesigned against the home and menu screens, ideally with the Carta 2
-> open in Ghidra and on hardware.
+- **two-step heat** (`+0x82` set): a press on home (screen 4) shows the "ready" prompt (screen 12),
+  where a double click heats and + / − do nothing in stock. Holding − from home therefore lands on
+  the prompt and opens the picker. This is the only mode it works in.
+- **one-press heat** (`+0x82` clear): any press on home starts a session, and + / − on the live view
+  open the stock edit screens, so every button already has a stock meaning and the picker never
+  opens. Four clicks switch to two-step heat.
+
+Screens, from the stock consumer's table (pointer `0x1a3c0` is a runtime address; the table is at
+disassembly `0x1a398`): 0 off / asleep, 1 live view (heating screen in a session), 4 / 14 home,
+5 / 6 edit, 7-9 menus, 12 the prompt. An earlier version treated screen 0 as idle -- from that table
+read 0x28 bytes late -- so its picker could only open while the screen was off, where it was
+invisible.
+
+The box is redrawn on every change, from the event hook, and again whenever stock redraws home.
+Events the picker takes reach the stock consumer as a short −, which home and the prompt ignore,
+so they still count as activity for auto-off. Leaving (or the 30 s timeout) does what a stock click
+on the prompt does -- its countdown is set to 1 -- and stock returns to home and redraws all of it.
+The picker opens even when the system is off, so it can be switched back on; while off, no ramp
+arms and no stage or offset is saved. It closes, passing the event on, as soon as the screen leaves
+home and the prompt. Five clicks (power on / off) and the app's start / stop / +10 s always reach
+the stock code.
 
 The earlier on/off gesture, + and − held together, is gone: it counted any − press followed by any +
 press, so stepping through presets could switch the system off.

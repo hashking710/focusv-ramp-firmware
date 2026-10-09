@@ -65,10 +65,24 @@
 #define DEV_NOTIFY_HANDLE   27
 #define DEV_ID              1
 
-/* Preset picker (ramp_input.c): a hold of - from the idle screen (0) opens it,
- * + and - step through the six presets, a double click switches the ramp
- * system on or off, a click leaves it. Events are the
- * stock consumer's codes: 1 = - short, 2 = + short, 3 = - held, 7 = click. */
+/* Preset picker (ramp_input.c): a hold of - from home opens it, + and - step
+ * through the six presets, a double click switches the ramp system on or off,
+ * a click leaves it. Events are the stock consumer's codes (decoder
+ * 0xbe00-0xc180): 1 = - short, 2 = + short, 3 = - held, 4 = + held, 7..11 =
+ * 1..5+ clicks, 13 = main long hold, 14 = any press (posted first).
+ *
+ * Screens (+0x79; the consumer's table pointer 0x1a3c0 is a runtime address,
+ * the table is at disassembly 0x1a398): 0 = off / asleep, 1 = live view (the
+ * heating screen in a session), 4 / 14 = home, 12 = the "ready" prompt. With
+ * +0x82 set (two-step heat, toggled by four clicks) a press on home moves to
+ * 12, where + / - short or held do nothing in stock; its countdown (+0x9f/
+ * +0xa0) then returns to home (0x7044: screen 4, view 18). With +0x82 clear
+ * (one-press heat) a press on home starts a session and + / - on the live
+ * view open the edit screens, so no button is free and the picker can't open.
+ * Home and the prompt are the only screens where it opens or shows. */
+#define DEV_HOME_SCREEN(s)  ((s) == 4 || (s) == 12 || (s) == 14)
+#define SCREEN_PROMPT       12
+#define OFF_PROMPT_TIMER    0x9f   /* u16 at +0x9f/+0xa0, unaligned: two bytes */
 #define DEV_PICK_COUNT      6
 #define DEV_PICK_ENTER      3
 #define DEV_PICK_NEXT       2

@@ -268,7 +268,10 @@ def main():
         check(struct.unpack('<I', out[24:28])[0] == len(out), 'header length field == file size')
         check(struct.unpack('<I', out[-4:])[0] == crc32_telink(out[:-4]), 'Telink CRC32 trailer correct')
         check(out[8:12] == b'KNLT' and out[:24] == stock[:24], 'header intact')
-        check(len(out) == D['end'] + 4, f'image covers exactly flash 0..{D["end"]:#x} (+ trailer): no sector past it is touched')
+        # The CRC trailer lands at D['end'] itself, the next sector's first
+        # bytes -- still well inside the bank the OTA writes (checked below).
+        check(len(out) == D['end'] + 4 and D['end'] + 4 <= D['bank'],
+              f'image covers exactly flash 0..{D["end"]:#x} + the 4-byte trailer, inside one bank ({D["bank"]:#x})')
         check(len(out) <= D['ota_max'], f'image ({len(out):#x} bytes) within the stock OTA size limit ({D["ota_max"]:#x}): the stock OTA rejects anything larger')
 
         print(f'== {a.device}: independent decode ==')

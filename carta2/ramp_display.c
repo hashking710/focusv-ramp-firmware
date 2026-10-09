@@ -3,7 +3,7 @@
  * LAYOUT during a ramp (240 x 240):
  *
  *   y 20   LEFT  battery % + battery icon       RIGHT  stage goal / ramp max + unit
- *   y 44   LEFT  session time left (M:SS, large) RIGHT  live temperature (large)
+ *   y 42   LEFT  session time left (M:SS, large) RIGHT  live temperature (large)
  *   y 72-196     LEFT  the chart, x 6-219, framed by a left axis, a baseline and a
  *                      right axis:
  *                        arc   -- the goal: the ramp's planned temperature over

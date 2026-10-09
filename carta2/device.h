@@ -80,8 +80,9 @@
                                        * PROD-071024 address -- mid-function in 111224) */
 /* 0x19a78 (addr, len, buf): page program 0x964, then reads the bytes back into
  * a 64-byte stack buffer (sub sp, #0x40, just below the saved r8) and compares
- * (0x13a80). Any len over 64 overwrites the caller's saved r8. The store is
- * 66 bytes, so it's written in pieces of at most 64. */
+ * (0x13a80). Any len over 64 overwrites the caller's saved r8. The store
+ * (RAMP_STORE_TOTAL, 69 bytes) is over that, so it's written in pieces of at
+ * most 64. */
 #define DEV_FLASH_WRITE_MAX 64
 
 #define DEV_RAMP_STATE      0x848000

@@ -227,6 +227,7 @@ typedef struct {
     u8  picker_dirty; /* picker_sel changed and not yet written to flash */
     u8  picker_enabled; /* the ramp system's on/off, cached while the picker shows */
     u32 picker_t0;    /* system tick of the picker's last event (timeout) */
+    u8  save_held;    /* a stock settings save was pending when / while the ramp ran */
     u8  press_awake;  /* Aeris/Sport: the device was fully on when the button
                        * went down (not woken from standby by that press) */
     u16 heat_s;       /* seconds this stage has spent heating, not at temperature */
@@ -294,6 +295,12 @@ void ramp_announce_tick(volatile ramp_state_t *st);
 void ramp_picker_close(volatile ramp_state_t *st);
 /* A device state in which a sentinel session must stay a stock session (Aeris
  * and Sport: quick heat, UI state 7). */
+/* Each device saves its settings -- preset slots included -- when a countdown
+ * (DEV_SAVE_TIMER) reaches zero; stock arms it with DEV_SAVE_DELAY after a
+ * button or app change. Firing while a ramp runs would persist the ramp's
+ * temporary stage temperature into the trigger slot, so a ramp holds any
+ * pending save (zeroing the countdown cancels it) and re-arms it once the slot
+ * holds its own value again. */
 #ifndef DEV_ARM_BLOCKED
 #define DEV_ARM_BLOCKED()    0
 #endif

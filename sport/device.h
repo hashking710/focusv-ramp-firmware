@@ -55,6 +55,11 @@
 #define DEV_DAB_BASE        0x842910
 #define DEV_SAVE_ARM(d)     do { (d)[31] = 200; (d)[32] = 250; } while (0)
 #define DEV_END_CUE         0x842870
+/* Settings save (preset slots included, sector 0x40000): 0x4ce0 counts d[32]
+ * down and saves at zero (0x4df4 -> 0x4e60); idle button changes arm it with
+ * 250 (0x4748, 0x46f6, ...) and the session completion too (0x8502). */
+#define DEV_SAVE_TIMER      (*(volatile u8 *)(DEV_DAB_BASE + 32))
+#define DEV_SAVE_DELAY      250
 
 #define DEV_PID_TICK        0x7c00
 #define DEV_STOP            0x6a98

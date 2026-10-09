@@ -76,9 +76,15 @@ static int slot_f(void) { return u16at(sim_struct, ((rank() + (conc() ? TBL_CO_F
 void sim_stop(void) { sim_struct[OFF_SESSION] = 0; }
 
 static int target_f;
+static int save_runs, saves, bad_saves, last_saved_f;   /* the stock settings save */
 void sim_pid_tick(void)
 {
     int meas;
+    if (save_runs && sim_dab[32] && --sim_dab[32] == 0) {   /* stock: save the slots */
+        saves++;
+        last_saved_f = slot_f();
+        if (last_saved_f != 150) bad_saves++;
+    }
     if (!sim_struct[OFF_SESSION])
         return;
     if (!sim_struct[OFF_REACHED])
@@ -114,7 +120,7 @@ static void reset_device(int carta)
     sim_struct[0x04] = 0;   /* F scale */
     tick_no = 0;
     notify_busy = 0; notify_ok = 0; last_len = 0;
-    erases = 0; never_reach = 0; sim_picker_closed = 0; sim_systick = 0x12345678u;
+    erases = 0; never_reach = 0; save_runs = 0; saves = 0; bad_saves = 0; last_saved_f = 0; sim_picker_closed = 0; sim_systick = 0x12345678u;
 }
 
 static volatile ramp_state_t *ST(void) { return RAMP_STATE; }
@@ -394,6 +400,23 @@ static void t_heat_cap_waits(void)
     printf("  ended at %ds\n", r.ended_at);
 }
 
+static void t_save_held(void)
+{
+    struct run r;
+    int i;
+    printf("a stock settings save pending at the start never captures a stage temperature\n");
+    reset_device(0);
+    save_runs = 1;
+    tick();
+    sim_dab[32] = 30;                 /* armed by a button change a moment ago */
+    start_session(1, 150, 65, 30);
+    r = run_to_end(400);
+    CHECK(r.ended_at > 0, "never ended");
+    CHECK(bad_saves == 0, "%d saves wrote a stage temperature", bad_saves);
+    for (i = 0; i < 300 && !saves; i++) tick();
+    CHECK(saves > 0 && last_saved_f == 150, "held save not re-armed (saves %d, slot %d)", saves, last_saved_f);
+}
+
 static void t_picker_timeout(void)
 {
     volatile ramp_state_t *st;
@@ -451,6 +474,7 @@ int main(void)
     t_garbage_ram();
     t_heat_cap();
     t_heat_cap_waits();
+    t_save_held();
     t_picker_timeout();
     t_flash_writes();
     CHECK(write_too_long == 0, "%d flash writes longer than DEV_FLASH_WRITE_MAX", write_too_long);

@@ -27,6 +27,8 @@ Builds: Carta 2 PROD-111224, Aeris PROD-111224, Carta Sport PROD-030426.
 | App markers post A5 / AF / 66 as events | traced: 16 / 17 / 18 (0x125f2, 0x125e6, 0x12726) | traced: 18 / 19 / 20 (0xb934, 0xbe3a, 0xbe2c) | traced: 18 / 19 / 20 (0xb76e, 0xb786, 0xb77a) |
 | Announce wrapper on the 0xAA reply; notify returns 0 when queued | traced (0x11562, 0x15a34) | traced (0xb066, 0xe734) | traced (0xa9ea, 0xec3c) |
 | Quick heat never arms a ramp | traced: screen 15 forces 85 C / 184 F (0xaf2c) and zeroes the countdown (0xb5b8); guard added; no writer of 15 found in this build | traced (0x81aa -> 0x85ac, 80 C) | traced (0x7c00, 90 C) |
+| A stock settings save can never persist a ramp's stage temperature into the trigger slot | traced: the save (every slot, 0x80000) runs when 0x843100 counts to 0 (0x63b8 -> 0x6524); armed by app settings / preset / power-off commands (0xfc9e, 0x10d46, 0x10da0, 0x11c2c); the stop routine only saves timestamps (0x903c) | traced: d[32] (0x84330c) -> 0x5762 | traced: d[32] (0x842930) -> 0x4df4 -> sector 0x40000 incl. the slots; armed 250 by idle clicks (0x4748: choosing the trigger preset); stop 0x6a98 saves timestamps only (0x6240 -> 0x60e0) |
+| ... fix: a ramp holds any pending save (zeroes the countdown at arm and every tick) and re-arms it after the slot is restored | host test (fails without the fix: the save wrote 455 F) | host test | host test |
 | A stage that never reaches temperature can't stall the ramp | host test (clock waits for reached) | host test (clock waits for reached) | host test |
 
 ## Aeris and Sport: buttons and lights

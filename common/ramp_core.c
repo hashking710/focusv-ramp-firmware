@@ -59,6 +59,19 @@ static void end_ramp(void)
     cue[4] = 2;
 }
 
+/* Holds a pending stock settings save while a ramp runs (see ramp.h). */
+static void hold_save(volatile ramp_state_t *st)
+{
+#ifdef DEV_SAVE_TIMER
+    if (DEV_SAVE_TIMER != 0) {
+        DEV_SAVE_TIMER = 0;
+        st->save_held = 1;
+    }
+#else
+    (void)st;
+#endif
+}
+
 /* ---- arming --------------------------------------------------------------- */
 
 /* A waypoint read back from flash is only used if it is a temperature the
@@ -150,6 +163,8 @@ static void try_arm(volatile ramp_state_t *st)
     st->at_temp_s = 0;
     FIELD16(OFF_COUNTDOWN) = total;
     st->last_left = total;
+    st->save_held = 0;
+    hold_save(st);        /* before the slot changes */
     apply_stage(st, 1);
 }
 
@@ -167,6 +182,11 @@ static void disarm(volatile ramp_state_t *st)
             DEV_SAVE_ARM(d);
         }
     }
+#ifdef DEV_SAVE_TIMER
+    if (st->save_held)    /* the slot is its own again: let the held save run */
+        DEV_SAVE_TIMER = DEV_SAVE_DELAY;
+#endif
+    st->save_held = 0;
     st->stage = 0;
     st->counted = 0;
 }
@@ -188,6 +208,7 @@ static void ramp_tick(void)
         st->picker_enabled = 0;
         st->ann_tries = 0;
         st->press_awake = 0;
+        st->save_held = 0;
     }
 
     ramp_announce_tick(st);
@@ -221,6 +242,7 @@ static void ramp_tick(void)
         st->stage = 0;   /* not a state try_arm wrote: drop it, touch nothing */
         return;
     }
+    hold_save(st);
 
     /* atomizer swapped mid-ramp: hand the session back to stock */
     if ((DEV_MODE_IS_CONC() ? 1 : 0) != st->bank) {

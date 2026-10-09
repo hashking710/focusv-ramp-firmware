@@ -45,6 +45,8 @@ extern int sim_picker_closed;
 #define DEV_DAB_BASE        sim_dab
 #define DEV_SAVE_ARM(d)     do { (d)[31] = 200; (d)[32] = 250; } while (0)
 #define DEV_END_CUE         sim_cue
+#define DEV_SAVE_TIMER      (*(volatile unsigned char *)(DEV_DAB_BASE + 32))
+#define DEV_SAVE_DELAY      250
 
 #define DEV_PID_TICK        sim_pid_tick
 #define DEV_STOP            sim_stop

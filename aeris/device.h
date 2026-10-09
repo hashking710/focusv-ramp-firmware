@@ -47,6 +47,10 @@
 #define DEV_DAB_BASE        0x8432ec
 #define DEV_SAVE_ARM(d)     do { (d)[31] = 200; (d)[32] = 250; } while (0)
 #define DEV_END_CUE         0x84324c
+/* Settings save: 0x5658 counts d[32] down and saves at zero (0x5762); button
+ * changes and the session completion arm it with 250, as on the Sport. */
+#define DEV_SAVE_TIMER      (*(volatile u8 *)(DEV_DAB_BASE + 32))
+#define DEV_SAVE_DELAY      250
 
 #define DEV_PID_TICK        0x8154
 #define DEV_STOP            0x7200

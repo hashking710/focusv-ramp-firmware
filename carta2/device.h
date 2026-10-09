@@ -51,6 +51,13 @@
 #define DEV_DAB_BASE        0x8430e0
 #define DEV_SAVE_ARM(d)     do { (d)[31] = 50; (d)[33] = 0; } while (0)
 #define DEV_END_CUE         0x843260
+/* Settings save, every preset slot included (0x80000: rank 0 at 0x6740-0x679c,
+ * ranks 1-5 in the loop at 0x67a6): 0x63b8 counts 0x843100 (= DEV_DAB_BASE +
+ * 32 = 0x8430a8 + 0x58) down and saves at zero (0x64da -> 0x6524); the app's
+ * settings / preset-table / power-off commands arm it with 100 (0xfc9e,
+ * 0x10d46, 0x10da0, 0x11c2c). */
+#define DEV_SAVE_TIMER      (*(volatile u8 *)(DEV_DAB_BASE + 32))
+#define DEV_SAVE_DELAY      100
 
 #define DEV_PID_TICK        0xaf2c
 #define DEV_STOP            0x97f0

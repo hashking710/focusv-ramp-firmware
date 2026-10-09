@@ -45,7 +45,8 @@ ends at 0x17000 (94,212 bytes with the trailer) -- well
 inside the 124 KB the stock OTA accepts (`main()` calls `bls_ota_set_fwSize_and_fwBootAddr(124,
 0x20000)`).
 
-The ramp store has its own sector at 0x70000, outside both OTA banks. Stock erases the bank it
+The ramp store has two sectors, 0x70000 and 0x71000 (two copies, so a power cut during a save
+never loses it), outside both OTA banks. Stock erases the bank it
 isn't running from at every boot, so a store inside the image would be lost after an OTA install
 (the image then runs from bank 1). Every stock erase site is traced in [`device.h`](device.h):
 nothing stock touches 0x61000-0x73fff.

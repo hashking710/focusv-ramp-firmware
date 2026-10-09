@@ -42,7 +42,8 @@ Body:    90,860 bytes (after the 40-byte header), SHA-1 4b57f086a175...
 | 0xa9ea | stock send of the `0xAA` dab-counter reply (notify `0xec3c`) | `ramp_announce_entry`: sends it unchanged, then announces the patch (`0xBC`) |
 
 The code goes at flash 0x18000 and runs at 0x18028, with 12 KB to grow into, and the output image
-ends at 0x1b000 (110,596 bytes with the trailer). The ramp store has its own sector at 0x70000,
+ends at 0x1b000 (110,596 bytes with the trailer). The ramp store has two sectors, 0x70000 and 0x71000 (two copies, so a power cut during a save
+never loses it),
 outside both OTA banks: stock erases the bank it isn't running from at every boot, so a store
 inside the image would be lost after an OTA install. Every stock erase site is traced in
 [`device.h`](device.h); nothing stock touches 0x61000-0x73fff. The stock

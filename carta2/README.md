@@ -67,18 +67,22 @@ draw (w+1) x (h+1) pixels, opaquely.
 
 ## Buttons during a ramp
 
-The patch hooks the only call to the stock button-event consumer (0x5618):
+The patch hooks the only call to the stock button-event consumer (0x5618). During a ramp:
 
-- **main button, single click:** passed to stock untouched, exactly as in a stock session. On the
-  heating screen it stops the ramp (screen 1, handler `0x5708` -> `0x97f0`); on the screensaver it
-  brings the ramp screen back. Earlier versions forced the screen first (to 5, the edit screen,
-  from a screen table read 0x28 bytes late; then to 1), which would have turned the screensaver's
-  wake click into a stop.
-- **+ / − short press:** next / previous stage
-- **+ / − held, double click:** ignored. Auto-repeat would skip every stage, and the stock +10 s
-  would rewind the ramp clock.
+- **main button, single click:** passed to stock untouched, exactly as in a stock session: it stops
+  the ramp (screen 1, handler `0x5708` -> `0x97f0`). There's no screensaver during a session (stock
+  clears its idle counter while one runs). Earlier versions forced the screen first (to 5, the edit
+  screen, from a screen table read 0x28 bytes late; then to 1).
+- **+ / − short press:** next / previous stage. Locked, they pass to stock, which ignores them in a
+  session, so the lock holds.
+- **five clicks (power off), and the app's start / stop / +10 s:** passed to stock. The ramp undoes
+  the +10 s.
+- **everything else -- + / − held, a double click, triple click, four clicks (lock), four clicks +
+  hold (low power), the long hold (next preset):** taken. Each would move the screen off the heating
+  screen (where alone stock sets "reached") or move the active preset under the ramp; held + / −
+  would also auto-repeat through every stage.
 
-Outside a ramp, every event goes to the stock consumer unchanged.
+Outside a ramp, every event goes to the stock consumer unchanged (stock mode: always).
 
 ## Choosing Focus V or Terpline at power-on
 
@@ -132,7 +136,8 @@ press, so stepping through presets could switch the system off.
 | 2 sites each | `0xd048` dab counter, `0xe42c` mode icon, `0xe300` status icon, `0xe2b4` READY banner | hidden during a ramp |
 
 The code (with the full-colour logo) goes at flash 0x30000 and runs at 0x30028, and the output image ends at 0x35000, well inside the 248 KB the stock OTA accepts. The ramp
-store has its own sector at 0xf0000, outside both OTA banks: stock erases the bank it isn't
+store has two sectors, 0xf0000 and 0xf1000 (two copies, so a power cut during a save never loses
+it), outside both OTA banks: stock erases the bank it isn't
 running from at every boot, so a store inside the image would be lost after an OTA install. Every
 stock erase site is traced in [`device.h`](device.h); nothing stock touches 0xe7000-0xfdfff.
 

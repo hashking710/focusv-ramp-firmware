@@ -55,7 +55,7 @@ CODE_INJECT_ADDR = 0x30000
 IMAGE_END_ADDR = 0x35000
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_carta2_v1.bin"   # built locally, never published
-BLOB_SHA256 = "b7b6d8461ab0525ef0b6dc0b2f077951e830630f4a7f92c03f468a4943cb09ca"   # written by tools/build.py
+BLOB_SHA256 = "4680ebbbbeee39c484ff77b40a6daae731dfa5c13e785632be377c0f77baf878"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock

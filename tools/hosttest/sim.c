@@ -278,6 +278,13 @@ static void t_offset(void)
           "temps %d %d %d", r.stage_temp[1], r.stage_temp[2], r.stage_temp[3]);
     ramp_marker_dispatch(RAMP_OFFSET_MARKER, (u8)(signed char)-10);
     CHECK(ramp_offset() == -10, "negative offset %d", ramp_offset());
+    {   /* every offset in range survives the store, -1 included (0xFF as a raw byte) */
+        int v;
+        for (v = RAMP_OFS_MIN_F; v <= RAMP_OFS_MAX_F; v++) {
+            ramp_marker_dispatch(RAMP_OFFSET_MARKER, (u8)(signed char)v);
+            CHECK(ramp_offset() == v, "offset %d read back as %d", v, ramp_offset());
+        }
+    }
 }
 
 static void t_picker(void)
@@ -731,6 +738,8 @@ static void t_rank_change(void)
     CHECK(ST()->stage == 0, "still ramping on the old slot");
     CHECK(u16at(sim_struct, TBL_CO_F * 2) == 150, "trigger slot not restored: %d", u16at(sim_struct, TBL_CO_F * 2));
     CHECK(u16at(sim_struct, OFF_COUNTDOWN) == 40, "countdown %d, not the new preset's hold", u16at(sim_struct, OFF_COUNTDOWN));
+    tick();
+    CHECK(target_f == 480, "the heater stayed at the ramp's stage (%d F), not preset 2's 480 F", target_f);
     for (i = 0; i < 5 * TPS; i++) tick();
     CHECK(ST()->stage == 0 && sim_struct[OFF_SESSION] == 1, "re-armed or stopped");
     for (i = 0; i < 200 * TPS && sim_struct[OFF_SESSION]; i++) tick();

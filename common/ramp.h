@@ -49,7 +49,8 @@
  *
  *  Safeguards. Waypoints are copied to RAM through the stock SPI read when a
  *  ramp arms and must all pass a range / consistency check (official-app
- *  limits) or the session runs as a plain stock session. The running state is
+ *  limits) or the session runs as a plain stock session (an app-requested one
+ *  stops instead). The running state is
  *  checked every tick, and nothing restores a preset slot from state this code
  *  didn't provably write. The stock PID, heat-up and every stock stop path
  *  stay in charge of the heater throughout.
@@ -124,20 +125,20 @@ typedef void (*flash_write_fn)(int addr, int len, void *buf);
 #define flash_write  STOCK_FN(flash_write_fn, DEV_FLASH_WRITE)
 
 /* ---- the ramp system's own on/off switch -----------------------------------
- * One more byte in the same flash sector as the waypoints (see
- * ramp_toggle_enabled in ramp_store.c), toggled from inside the preset picker
- * (ramp_picker.c): Carta 2 double click, Aeris and Sport triple click. Erased flash (0xFF) or
- * anything non-zero means enabled, so a store from before this existed, or
- * one that's never been touched, behaves exactly as it always has. */
+ * One more byte in the store (see ramp_toggle_enabled in ramp_store.c),
+ * toggled from inside the preset picker (ramp_picker.c): Aeris and Sport triple
+ * click. The Carta 2 has no picker, so there it stays on; stock mode is its
+ * off switch. Erased flash (0xFF) or anything non-zero means enabled, so a
+ * store that's never been touched behaves exactly as it always has. */
 #define RAMP_ENABLED_OFFSET  RAMP_STORE_SIZE
 #define RAMP_SEL_OFFSET      (RAMP_STORE_SIZE + 1)   /* the chosen built-in preset */
-#define RAMP_OFS_OFFSET      (RAMP_STORE_SIZE + 2)   /* setup offset, signed F */
+#define RAMP_OFS_OFFSET      (RAMP_STORE_SIZE + 2)   /* setup offset, signed F ^ 0x80 */
 #define RAMP_VER_OFFSET      (RAMP_STORE_SIZE + 3)   /* store layout version */
 #define RAMP_MODE_OFFSET     (RAMP_STORE_SIZE + 4)   /* RAMP_MODE_STOCK, or anything else = ramp mode */
 #define RAMP_SEQ_OFFSET      (RAMP_STORE_SIZE + 5)   /* which copy is newer (wrapping) */
 #define RAMP_COMMIT_OFFSET   (RAMP_STORE_SIZE + 6)   /* 0x00 = complete: written last */
 #define RAMP_STORE_TOTAL     (RAMP_STORE_SIZE + 7)
-#define RAMP_STORE_VERSION   3
+#define RAMP_STORE_VERSION   4                       /* 4: offset stored ^ 0x80 */
 /* Two copies, in DEV_RAMP_FLASH and the sector after it. A save writes the
  * one that isn't current, commit byte last, so a power cut at any point
  * leaves either the old store or the new one complete (ramp_store.c). */
@@ -231,7 +232,7 @@ void ramp_store_set(u8 off, u8 v);
 /* ---- preset slots: custom (rank 0) + 5, on every device ---------------- */
 #define RAMP_MAX_RANK  5
 
-/* ---- waypoint sanity (see count_stages): the official app's own limits --
+/* ---- waypoint sanity (wp_sane / load_stages): the official app's own limits --
  * flower 275-500 F, concentrate 365 F to the device's ceiling (DEV_MAX_F in
  * device.h), at most 300 s per stage (stock maximum 240 s). A store holding
  * anything outside these never arms. ---------------------------------------- */
@@ -254,8 +255,8 @@ typedef struct {
     u8  bank;         /* 0 flower / 1 concentrate, locked at arm time */
     u8  rank;         /* preset slot the session was started from */
     u16 total_s;      /* sum of stage holds, seconds */
-    u16 saved_f;      /* that slot's original contents (the sentinel), */
-    u16 saved_c;      /*   restored when the session ends */
+    u16 saved_f;      /* that slot's original contents (the sentinel, or an */
+    u16 saved_c;      /*   app-requested ramp's real preset), restored at the end */
     u16 last_left;    /* the ramp's own view of the countdown -- see ramp_core.c */
     u16 at_temp_s;    /* seconds this ramp has run with the stock "reached" flag set */
     u8  counted;      /* stock completion bookkeeping already run this session */
@@ -346,14 +347,14 @@ u8   ramp_default_stages(volatile ramp_state_t *st, u8 sel);
 void ramp_announce_tick(volatile ramp_state_t *st);
 void ramp_announce_queue(volatile ramp_state_t *st);
 void ramp_picker_close(volatile ramp_state_t *st);
-/* A device state in which a sentinel session must stay a stock session (Aeris
- * and Sport: quick heat, UI state 7). */
 /* Each device saves its settings -- preset slots included -- when a countdown
- * (DEV_SAVE_TIMER) reaches zero; stock arms it with DEV_SAVE_DELAY after a
- * button or app change. Firing while a ramp runs would persist the ramp's
- * temporary stage temperature into the trigger slot, so a ramp holds any
+ * (DEV_SAVE_TIMER, device.h) reaches zero; stock arms it with DEV_SAVE_DELAY
+ * after a button or app change. Firing while a ramp runs would persist the
+ * ramp's temporary stage temperature into the slot, so a ramp holds any
  * pending save (zeroing the countdown cancels it) and re-arms it once the slot
- * holds its own value again. */
+ * holds its own value again (hold_save / disarm in ramp_core.c). */
+/* A device state in which a sentinel session must stay a stock session
+ * (quick heat: Aeris / Sport UI state 7, Carta 2 screen 15). */
 #ifndef DEV_ARM_BLOCKED
 #define DEV_ARM_BLOCKED()    0
 #endif

@@ -313,7 +313,10 @@ static void ramp_tick(void)
      * atomizer (mode), or an app selecting another rank (every 0xCC packet
      * sets both ranks). Hand it back to stock as a plain session of that
      * preset: the ramp's slot restored, the countdown that preset's own hold
-     * (what stock loads at a session start), and no re-arming this session. */
+     * (what stock loads at a session start), "reached" cleared so stock takes
+     * the new preset's temperature (it reloads the target from the active slot
+     * only while reached is 0 -- left set, the heater would stay at the ramp's
+     * stage), and no re-arming this session. */
     {
         u8 conc = DEV_MODE_IS_CONC() ? 1 : 0;
         if (conc != st->bank || DEV_RANK(conc) != st->rank) {
@@ -321,6 +324,7 @@ static void ramp_tick(void)
             st->arm_failed = 1;
             if (DEV_RANK(conc) <= RAMP_MAX_RANK)
                 FIELD16(OFF_COUNTDOWN) = *PRESET(conc ? TBL_CO_HOLD : TBL_FL_HOLD, DEV_RANK(conc));
+            STRUCT_BASE[OFF_REACHED] = 0;
             return;
         }
     }

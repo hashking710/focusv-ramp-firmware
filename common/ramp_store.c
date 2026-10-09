@@ -197,7 +197,7 @@ void ramp_marker_dispatch(u8 marker, u8 byte14)
     if (marker == RAMP_OFFSET_MARKER) {
         int v = (signed char)byte14;
         if (v >= RAMP_OFS_MIN_F && v <= RAMP_OFS_MAX_F) {
-            ramp_store_set(RAMP_OFS_OFFSET, byte14);
+            ramp_store_set(RAMP_OFS_OFFSET, (u8)(byte14 ^ 0x80));   /* see ramp_offset */
             if (st->magic == RAMP_MAGIC)
                 ramp_announce_queue(st);   /* tell the app what's stored now */
         }
@@ -245,14 +245,11 @@ u8 ramp_selected(void)
     return (b < DEV_PICK_COUNT) ? b : RAMP_DEFAULT_PRESET;
 }
 
+/* Stored with the top bit flipped: -1 is 0xFF as a raw byte, the same as
+ * erased flash. Flipped, every offset in range has its own byte, and erased
+ * (0xFF) decodes to 127 -- out of range, so "never set" reads as 0. */
 int ramp_offset(void)
 {
-    u8 b = store_byte(RAMP_OFS_OFFSET);
-    int v;
-    if (b == 0xff)
-        return 0;
-    v = (signed char)b;
-    if (v < RAMP_OFS_MIN_F) v = RAMP_OFS_MIN_F;
-    if (v > RAMP_OFS_MAX_F) v = RAMP_OFS_MAX_F;
-    return v;
+    int v = (signed char)(store_byte(RAMP_OFS_OFFSET) ^ 0x80);
+    return (v < RAMP_OFS_MIN_F || v > RAMP_OFS_MAX_F) ? 0 : v;
 }

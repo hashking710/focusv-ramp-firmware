@@ -58,7 +58,7 @@ IMAGE_END_ADDR = 0x1B000
 OTA_MAX_IMAGE = 124 << 10
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_sport_v1.bin"   # built locally, never published
-BLOB_SHA256 = "93200139fcb2581fc204f99cf88726784ecb14fd8df7860fcc5de5798bf802b5"   # written by tools/build.py
+BLOB_SHA256 = "189fd4124739caf812a290c80e71162dda70f1416eb3b7b61a6dbd9ee961e36b"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock

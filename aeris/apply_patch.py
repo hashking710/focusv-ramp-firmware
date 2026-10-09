@@ -55,7 +55,7 @@ CODE_INJECT_ADDR = 0x14000
 IMAGE_END_ADDR = 0x17000
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_aeris_v1.bin"   # built locally, never published
-BLOB_SHA256 = "148bb8820d2e6c5460d4f8e50d0cacc3f2266c611ca242859914d4e504f15f69"   # written by tools/build.py
+BLOB_SHA256 = "650ce2b7b299c9200c0570706b41a1e841e2c7a25ca6c9009d425918f383e051"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock

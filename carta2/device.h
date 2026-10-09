@@ -99,9 +99,9 @@
 #define DEV_NOTIFY_HANDLE   27
 #define DEV_ID              1
 
-/* Preset picker (ramp_input.c): a single click on the idle live view opens it,
- * + and - step through the six presets, a double click switches the ramp
- * system on or off, a click leaves it. Events are the stock consumer's codes
+/* Preset picker (ramp_input.c): disabled on the Carta 2 (below). Were it
+ * open, + and - would step through the six presets, a double click switch the
+ * ramp system on or off, a click leave it. Events are the stock consumer's codes
  * (decoder 0xbe00-0xc180): 1 = - short, 2 = + short, 3 = - held, 4 = + held,
  * 7..11 = 1..5+ clicks, 12 = 4 clicks + hold, 13 = main long hold, 14 = any
  * press (posted first).

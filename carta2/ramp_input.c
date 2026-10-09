@@ -40,11 +40,12 @@
  *                   -- and screen 8, which would move the active slot under
  *                   the ramp), 6 / 15.
  *
- * Preset picker (ramp_picker.c), when no ramp is running: a single click on
- * the idle live view, with the device unlocked, opens it (see
- * DEV_PICKER_SCREEN in device.h -- the only button stock leaves unused there);
- * + / - step through the presets, a double click switches the ramp system on
- * or off, a click leaves. Events it takes reach the stock consumer as 6, which
+ * Preset picker (ramp_picker.c): DISABLED on the Carta 2 -- every gesture on
+ * the idle live view has a stock meaning (a single click wakes the screen from
+ * the screensaver), so DEV_PICK_ENTER is a code no event has and nothing opens
+ * it; see device.h. The code below is kept for a future entry: + / - would
+ * step through the presets, a double click switch the ramp system on or off,
+ * a click leave. Events it takes reach the stock consumer as 6, which
  * the live view ignores (0x5bf6), so the consumer's prelude still counts them
  * as activity (keep-awake +0x57 / +0x58, auto-off +0xb0 / +0xb4). It's drawn
  * from here on every change and from the 0xce70 hook whenever stock redraws

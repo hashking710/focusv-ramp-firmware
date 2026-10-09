@@ -61,3 +61,12 @@ Builds: Carta 2 PROD-111224, Aeris PROD-111224, Carta Sport PROD-030426.
 | Ramp screen drawing (visual) | host render test only; hardware |
 | Events during a ramp | traced: only 7 / 17 (stop), 11 (power off), 14, 18-21 pass; 3 / 4 / 6 / 8 / 9 / 10 / 12 / 13 / 15 / 16 are taken -- each would move the screen off 1 (where alone reached is set, 0xb21c) or the active slot (13: next preset rank, 0x61f6 / 0x6236) |
 | Events taken mid-ramp skip the consumer's prelude | traced: it only reloads the delayed log / save timers (0x8430a8 +0x57 -> log record 0x63fc, +0x58 -> save flag 0x64da) while they're already running, and resets the idle counter (no screensaver during a session); skipping it lets a pending save fire a little sooner |
+
+## Terpline (web) side
+
+| Item | Status |
+| --- | --- |
+| Stage upload leaves the custom slot and active rank as they were | fixed in terpline-web 530d4ac: each stage save is a stock "set custom preset" packet (last stage's temperature / hold, custom rank selected); the panel now restores the pre-upload values with marker 0 (no start; ignored by the patch) |
+| Starting a ramp from Terpline writes the 150 F trigger into the custom slot and selects it; after the ramp the slot is the trigger, not the user's earlier custom preset | open: decide whether Terpline should restore it after the ramp (the tab may be closed by then) |
+| 0x99 bytes 8-11 / 14-15 (custom set temperature / hold) are in the device's display unit | traced on the Carta 2 (0x1127e: +0x36 / +0x4e, F variant 0x11eaa); used as-is by the offset and restore commands |
+

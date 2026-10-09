@@ -26,8 +26,10 @@ by, or sponsored by Focus V.
 ## What it does
 
 - **Ramps from Terpline or the device.** Terpline uploads up to 5 stages per mode (flower /
-  concentrate), each a temperature plus a hold time, stored in their own flash sector. The device
-  also ships six built-in concentrate ramps (the same profiles as Terpline's presets).
+  concentrate), each a temperature plus a hold time. They live in the patch's own store, outside
+  both OTA banks (stock wipes the bank it isn't running from at every boot), kept as two copies so
+  a power cut during a save never loses them. The device also ships six built-in concentrate ramps
+  (the same profiles as Terpline's presets).
 - **Stock mode, switchable from any app.** One packet switches the patch into a pass-through:
   buttons, screen, lights and sessions behave exactly like stock firmware, and no ramp starts.
   Another switches it back. Saved ramps and settings are kept, the mode survives power-off, and
@@ -54,6 +56,14 @@ by, or sponsored by Focus V.
   sentinel slot is a normal stock session at that temperature. A setup offset (−10 to +15 °F, set from the app) shifts the
   built-in presets; it defaults to zero. It's sent as marker 0xBB with the offset in packet byte 14,
   which the stock packet handler never reads.
+- **Another app taking over mid-ramp.** If another app (the official one included) selects a
+  different preset during a ramp, or the atomizer changes, the ramp hands the session back to
+  stock as a plain session of the now-active preset: the ramp's slot is put back, the time is that
+  preset's own, and it doesn't re-arm. On the Carta 2 the whole stock screen is redrawn whenever a
+  ramp ends.
+- **Apps can follow a ramp.** The device announces itself when a ramp starts and ends (flags bit 2,
+  [PROTOCOL.md](PROTOCOL.md)); the status packet can't say, since its session byte is the
+  countdown's low byte.
 - **Stages reuse the stock heater.** Each stage changes the active preset's temperature exactly
   the way the stock firmware changes temperature mid-session. The stock heat-up, ready cue, PID
   control and safety limits run every stage unchanged; the patch never drives the heater itself.
@@ -61,8 +71,8 @@ by, or sponsored by Focus V.
   Aeris and Sport. Both use the stock stop path. On the Carta 2, **+ / −** while heating jump to
   the next or previous stage.
 - **The dab counter counts real dabs.** A ramp counts once, when it has reached stage 2 and has run
-  for 20 seconds at temperature. Time at temperature is the stock "reached" flag, so on the Carta 2
-  heat-up doesn't count. It uses the same counters, and the same save, as a finished stock session,
+  for 20 seconds at temperature. Time at temperature is the stock "reached" flag, so heat-up doesn't
+  count, on any of the three. It uses the same counters, and the same save, as a finished stock session,
   so the official app reports it accurately. A ramp stopped before that point isn't counted, just as
   a stopped stock session isn't. A single-stage ramp is counted by the stock firmware when it finishes.
 - **Progress display.** On the Carta 2, the top of the screen shows battery % and time left on

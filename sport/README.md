@@ -52,6 +52,19 @@ OTA accepts at most 124 KB: `main()` calls the SDK's `bls_ota_set_fwSize_and_fwB
 waypoint store at 0x18000, the same address as its own code, so the first save would have erased
 the patch.
 
+## Switching between Terpline and Focus V on the device
+
+On and idle, press the button five times and hold the fifth: the patch switches between ramp mode
+(Terpline) and stock mode (Focus V, the patch a pass-through) and remembers it. The lights confirm
+it for 1.5 s -- the logo's flame colours across the LEDs and a green button for Terpline, white for
+Focus V -- if your LEDs are on.
+
+The scanner posts its hold (15) at 200 scans whatever the press count; stock's own multi-press holds
+use counts 2, 4 and 7, a hold when idle does nothing in stock, and a release after a long press
+clears the count, so the five-click power off never follows. The hook takes a hold with the count
+at 5 (`ramp_event.c`, checked before the stock-mode pass-through) and hands it on as a press.
+During a session the hold goes to stock, which stops the session. A picker left open closes.
+
 ## Preset picker and on/off
 
 With the device fully on (awake, not in standby), idle (no session) and the LEDs on, **hold the

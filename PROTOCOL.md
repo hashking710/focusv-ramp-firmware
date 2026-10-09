@@ -99,10 +99,11 @@ power-off; saved ramps, the preset choice and the offset are kept too. The
 switch is refused while a ramp runs. To remove the patch entirely, reflash the
 original firmware.
 
-The Carta 2 can also switch at power-on, with no app: holding − while pressing
-the power button five times starts it in ramp mode, holding + starts it in stock
-mode, and the choice is kept. Its announcement reports the result like any other
-switch.
+The devices can also switch with no app. The Carta 2 at power-on: holding −
+while pressing the power button five times starts it in ramp mode, holding +
+starts it in stock mode. The Aeris and Sport, on and idle: five presses with the
+fifth held switch between the two. The choice is kept either way, and the
+announcement reports it like any other switch.
 
 ### Starting a ramp
 

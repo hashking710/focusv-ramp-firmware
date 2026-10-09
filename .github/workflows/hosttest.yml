@@ -11,5 +11,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build and run the shared ramp code against the stock-firmware model
         run: |
-          gcc -std=gnu99 -Wall -Werror -Itools/hosttest -Icommon common/*.c tools/hosttest/sim.c -o hosttest
+          gcc -std=gnu99 -Wall -Werror -Itools/hosttest -Icommon common/*.c aeris/ramp_event.c tools/hosttest/sim.c -o hosttest
           ./hosttest

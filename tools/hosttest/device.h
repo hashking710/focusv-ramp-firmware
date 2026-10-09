@@ -70,6 +70,28 @@ extern int sim_picker_closed;
 #define DEV_PICK_COUNT      6
 #endif
 
+/* Aeris button events, for aeris/ramp_event.c (compiled into the host test
+ * for the mode-switch gesture): the UI block and the event mailbox. */
+extern unsigned char sim_ui[64];
+extern unsigned char sim_mb[2];
+void sim_consumer(void);
+#define DEV_EV_MB           sim_mb
+#define DEV_EV_CONSUMER     sim_consumer
+#define DEV_UI_STATE_ADDR   (sim_ui + 2)
+#define DEV_EV_CLICKS()     (sim_ui[0x1d])
+#define DEV_LEDS_ON()       (sim_ui[0x0e])
+#define DEV_EV_IGNORED()    0
+#define DEV_IDLE()          ((*(volatile unsigned char *)DEV_UI_STATE_ADDR) == 1 && STRUCT_BASE[OFF_SESSION] == 0)
+#define DEV_EV_APP_MIN      18
+#define DEV_EV_POWER_OFF    11
+#define DEV_EV_NOOP         16
+#define DEV_EV_HOLD         15
+#define DEV_PICK_ENTER      15
+#define DEV_PICK_NEXT       7
+#define DEV_PICK_PREV       (-1)
+#define DEV_PICK_EXIT       15
+#define DEV_PICK_TOGGLE     9
+
 #define DEV_AFTER_TICK(st)  ((void)0)
 extern int sim_clock_waits;
 #define DEV_CLOCK_WAITS_FOR_REACHED  (sim_clock_waits)

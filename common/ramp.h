@@ -166,6 +166,12 @@ u8 ramp_enabled(void);
 u8 ramp_stock_mode(void);
 u8 ramp_store_stock_mode(void);   /* from flash, bypassing the cache */
 void ramp_set_stock_mode(u8 stock);   /* store + cache + announce (app or device) */
+/* Aeris / Sport: five presses with the fifth held switch the mode on the
+ * device itself, confirmed by a short light cue (ramp_event.c, ramp_led.c). */
+#define RAMP_MODE_PRESSES    5
+#define RAMP_MODE_CUE_TICKS  (RAMP_SYS_TICKS_PER_S * 3 / 2)
+#define RAMP_CUE_TERPLINE    1
+#define RAMP_CUE_FOCUSV      2
 
 /* Built-in presets (ramp_presets.c). Each device exposes DEV_PICK_COUNT of
  * them through its picker; an erased selection means the Balanced preset. */
@@ -265,6 +271,8 @@ typedef struct {
     u16 heat_s;       /* seconds this stage has spent heating, not at temperature */
     u32 heat_t0;      /* Aeris/Sport: system tick heat_s was last advanced at */
     u8  stock_mode;   /* cache of the store's mode byte (ramp_stock_mode) */
+    u8  mode_cue;     /* Aeris / Sport: RAMP_CUE_* being shown after a mode switch */
+    u32 mode_cue_t0;  /*   system tick it started */
     u8  boot_mod;     /* Carta 2 boot gesture (ramp_input.c): the modifier held */
     u8  boot_presses; /*   main-button presses counted with it */
     u8  boot_down;    /*   samples the main button has been down (255: counted) */

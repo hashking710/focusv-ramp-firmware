@@ -22,11 +22,16 @@
 void ramp_trampoline(void);
 void ramp_marker_dispatch(u8 marker, u8 byte14);
 int  ramp_announce_entry(int handle, const u8 *data, int len);
+void ramp_event_entry(void);   /* aeris/ramp_event.c */
 
 unsigned char sim_struct[256];
 unsigned char sim_dab[64];
 unsigned char sim_cue[16];
 unsigned char sim_state[1024] __attribute__((aligned(8)));
+unsigned char sim_ui[64];
+unsigned char sim_mb[2];
+static int consumed = -1;   /* the event the stock consumer last got */
+void sim_consumer(void) { if (sim_mb[1]) { consumed = sim_mb[0]; sim_mb[1] = 0; } }
 
 unsigned int sim_systick;
 int sim_picker_closed;
@@ -120,6 +125,9 @@ static void reset_device(int carta)
     memset(sim_state, 0xa7, sizeof sim_state);      /* power-on garbage */
     memset(flash, 0xff, sizeof flash);
     power_ops = -1;
+    memset(sim_ui, 0, sizeof sim_ui);
+    memset(sim_mb, 0, sizeof sim_mb);
+    consumed = -1;
     carta_timing = carta;
     sim_clock_waits = !carta;
     sim_struct[0x04] = 0;   /* F scale */
@@ -589,6 +597,53 @@ static void t_power_cut(void)
     CHECK(done, "the save never completed");
 }
 
+/* the Aeris button hook, as the consumer's caller: one event through it */
+static void press_event(int ev, int clicks)
+{
+    sim_ui[0x1d] = (unsigned char)clicks;
+    sim_mb[0] = (unsigned char)ev;
+    sim_mb[1] = 1;
+    consumed = -1;
+    ramp_event_entry();
+}
+
+static void t_mode_gesture(void)
+{
+    int k;
+    printf("five presses with the fifth held switch Terpline / Focus V on the Aeris and Sport\n");
+    reset_device(0);
+    tick();
+    sim_ui[2] = 1;                                   /* on */
+    sim_ui[0x0e] = 1;                                /* LEDs on */
+    for (k = 1; k <= 5; k++) press_event(16, k);     /* the five presses reach stock */
+    CHECK(consumed == 16 && !ramp_stock_mode(), "a press was taken");
+    press_event(15, 5);
+    CHECK(ramp_stock_mode() && ST()->mode_cue == RAMP_CUE_FOCUSV, "didn't switch to Focus V");
+    CHECK(consumed == 16, "the hold reached stock as %d", consumed);
+    press_event(15, 5);                              /* again, from stock mode */
+    CHECK(!ramp_stock_mode() && ST()->mode_cue == RAMP_CUE_TERPLINE, "didn't switch back to Terpline");
+
+    press_event(15, 4);                              /* 4 + hold: stock's own (dim mode), untouched */
+    CHECK(!ramp_stock_mode() && consumed == 15, "4 presses + hold was taken (%d)", consumed);
+    press_event(16, 1);                              /* a single press + hold: the picker, not the mode */
+    press_event(15, 1);
+    CHECK(ST()->picker_on && !ramp_stock_mode(), "single hold should open the picker");
+    press_event(15, 5);                              /* from inside the picker: switches, picker closes */
+    CHECK(ramp_stock_mode() && !ST()->picker_on, "picker open: no switch or picker left open");
+    press_event(15, 5);
+
+    start_session(1, 150, 65, 30);                   /* during a session: stock's hold (stop) */
+    tick();
+    press_event(15, 5);
+    CHECK(!ramp_stock_mode() && consumed == 15, "switched during a session (%d)", consumed);
+    sim_struct[OFF_SESSION] = 0;
+    tick();
+
+    sim_ui[2] = 8;                                   /* standby: not on */
+    press_event(15, 5);
+    CHECK(!ramp_stock_mode(), "switched in standby");
+}
+
 static void t_rank_change(void)
 {
     int i;
@@ -694,6 +749,7 @@ int main(void)
     t_foreign_sector();
     t_rank_change();
     t_power_cut();
+    t_mode_gesture();
     t_picker_timeout();
     t_flash_writes();
     CHECK(write_too_long == 0, "%d flash writes longer than DEV_FLASH_WRITE_MAX", write_too_long);

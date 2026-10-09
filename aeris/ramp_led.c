@@ -119,6 +119,35 @@ static void show_ramp(volatile ramp_state_t *st)
     button(r, g, b);
 }
 
+/* The mode-switch cue (five presses, the fifth held): Terpline is the logo's
+ * flame sweep across the LEDs -- cyan, green, yellow, orange -- with a green
+ * button; Focus V is plain white. */
+static const u8 CUE_R[4] = {   0,  40, 240, 255 };
+static const u8 CUE_G[4] = { 190, 200, 220, 135 };
+static const u8 CUE_B[4] = { 210,  70,  20,   0 };
+
+static void show_cue(u8 cue)
+{
+    int i, x, seg, t;
+    for (i = 0; i < LED_COUNT; i++) {
+        u8 r = 200, g = 200, b = 200;
+        if (cue == RAMP_CUE_TERPLINE) {
+            x = rom_div(i * 3 * 256, LED_COUNT - 1); seg = x >> 8; t = x & 0xff;
+            if (seg > 2) { seg = 2; t = 255; }
+            r = (u8)(CUE_R[seg] + (((CUE_R[seg + 1] - CUE_R[seg]) * t) >> 8));
+            g = (u8)(CUE_G[seg] + (((CUE_G[seg + 1] - CUE_G[seg]) * t) >> 8));
+            b = (u8)(CUE_B[seg] + (((CUE_B[seg + 1] - CUE_B[seg]) * t) >> 8));
+        }
+        LED_RGB[i * 3 + 0] = r;
+        LED_RGB[i * 3 + 1] = g;
+        LED_RGB[i * 3 + 2] = b;
+    }
+    if (cue == RAMP_CUE_TERPLINE)
+        button(40, 200, 70);
+    else
+        button(200, 200, 200);
+}
+
 /* After every ramp tick: the picker only shows on the idle screen. */
 void ramp_led_tick(void)
 {
@@ -138,6 +167,19 @@ void ramp_led_entry(void)
 {
     volatile ramp_state_t *st = RAMP_STATE;
     u16 pin;
+
+    /* The mode-switch cue shows in either mode, for its 1.5 s. */
+    if (st->magic == RAMP_MAGIC && st->mode_cue) {
+        if (DEV_SYS_TICK - st->mode_cue_t0 >= RAMP_MODE_CUE_TICKS)
+            st->mode_cue = 0;
+        else if (LED_ENABLED != 0 && LED_RAIL_BLOCK == 0 && !stock_animating()) {
+            show_cue(st->mode_cue);
+            pin = LED_RAIL_PIN;
+            *(volatile u8 *)(GPIO_OUT_BASE + (pin >> 8) * 8) |= (u8)pin;
+            led_push();
+            return;
+        }
+    }
 
     if (st->magic != RAMP_MAGIC || st->stock_mode || LED_ENABLED == 0 || LED_RAIL_BLOCK != 0 || stock_animating()) {
         stock_led_dispatch();

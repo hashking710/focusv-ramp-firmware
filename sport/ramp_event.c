@@ -18,6 +18,24 @@ void ramp_event_entry(void)
     volatile u8 *mb = EV_MB;
     int ev = mb[0];
 
+    /* Five presses, the fifth held, on a device that's on and idle: switch
+     * between Terpline (ramp mode) and Focus V (stock mode), in either mode. */
+    if (mb[1] && ev == DEV_EV_HOLD && DEV_EV_CLICKS() == RAMP_MODE_PRESSES &&
+        DEV_IDLE() && !DEV_EV_IGNORED()) {
+        volatile ramp_state_t *st = RAMP_STATE;
+        if (st->magic == RAMP_MAGIC && !ramp_active(st)) {
+            u8 to_stock = !ramp_stock_mode();
+            st->picker_on = 0;          /* a picker left open closes, unsaved */
+            st->picker_dirty = 0;
+            ramp_set_stock_mode(to_stock);
+            st->mode_cue = to_stock ? RAMP_CUE_FOCUSV : RAMP_CUE_TERPLINE;
+            st->mode_cue_t0 = DEV_SYS_TICK;
+            mb[0] = DEV_EV_NOOP;
+            orig_event_consumer();
+            return;
+        }
+    }
+
     if (ramp_stock_mode()) {   /* every event to stock, untouched */
         orig_event_consumer();
         return;

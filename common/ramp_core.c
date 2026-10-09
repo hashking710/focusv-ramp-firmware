@@ -236,6 +236,7 @@ static void ramp_tick(void)
 
     if (st->magic != RAMP_MAGIC) {
         st->stock_mode = ramp_store_stock_mode();   /* before the magic makes it the answer */
+        st->mode_cue = 0;
         st->boot_mod = 0;
         st->boot_presses = 0;
         st->boot_down = 0;

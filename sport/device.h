@@ -120,6 +120,12 @@
  * auto-off timer (+0x42) and refreshes 0x842910+0x20. Events the picker takes
  * are handed on as 16 (a press), which state 1 ignores, so that still runs. */
 #define DEV_EV_NOOP         16
+/* A hold (15) is posted at 200 scans of the press, whatever the press count;
+ * stock's longer multi-press holds use counts 2, 4 and 7, and a release after
+ * a long press clears the count, so the five-click power off never follows.
+ * Five presses with the fifth held -- a hold with the count at 5 -- does
+ * nothing in stock when idle (0x47be / 0x50f4): it's the mode switch. */
+#define DEV_EV_HOLD         15
 #define DEV_EV_MB           0x844b30
 #define DEV_EV_CONSUMER     0x45cc
 #define DEV_UI_STATE_ADDR   0x842697

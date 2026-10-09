@@ -10,6 +10,10 @@
  * Markers (all fall through the stock A5 / AF / 66 compare chain untouched):
  *   0xB1-0xB5  flower waypoints 1-5        (bank 0)
  *   0xB6-0xBA  concentrate waypoints 1-5   (bank 1)
+ *   0xBB       setup offset (byte 14, signed F)
+ *   0xBD       stock / ramp mode (byte 14 'S' / 'R')
+ *   0xBE       built-in preset choice (byte 14, 0 .. DEV_PICK_COUNT - 1)
+ *   0xA5 + 'R' in byte 14: run the session it starts as a ramp
  * Waypoint 1 of a bank clears that bank's waypoints 2-5; a ramp is the saved
  * prefix up to the first empty (hold 0 / erased) waypoint.
  * The mode comes from the marker, not the device: the attached atomizer decides
@@ -192,8 +196,23 @@ void ramp_marker_dispatch(u8 marker, u8 byte14)
 
     if (marker == RAMP_OFFSET_MARKER) {
         int v = (signed char)byte14;
-        if (v >= RAMP_OFS_MIN_F && v <= RAMP_OFS_MAX_F)
+        if (v >= RAMP_OFS_MIN_F && v <= RAMP_OFS_MAX_F) {
             ramp_store_set(RAMP_OFS_OFFSET, byte14);
+            if (st->magic == RAMP_MAGIC)
+                ramp_announce_queue(st);   /* tell the app what's stored now */
+        }
+        return;
+    }
+
+    if (marker == RAMP_SELECT_MARKER) {
+        if (byte14 < DEV_PICK_COUNT) {
+            ramp_store_set(RAMP_SEL_OFFSET, byte14);
+            if (st->magic == RAMP_MAGIC) {
+                st->picker_sel = byte14;   /* an open picker (Aeris / Sport) follows it */
+                st->picker_dirty = 0;
+                ramp_announce_queue(st);
+            }
+        }
         return;
     }
 

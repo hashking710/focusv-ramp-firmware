@@ -181,6 +181,10 @@ void ramp_set_stock_mode(u8 stock);   /* store + cache + announce (app or device
 /* Sent as a SET_TEMP marker with the offset in packet byte 14 (unread by stock
  * firmware; see ramp_marker_entry.s). Byte 14 is zero in every other packet. */
 #define RAMP_OFFSET_MARKER   0xbb
+/* Chooses the built-in preset (the picker's choice), from an app: its number
+ * (0 .. DEV_PICK_COUNT - 1) in byte 14. The only way to choose one on the
+ * Carta 2, which has no picker. */
+#define RAMP_SELECT_MARKER   0xbe
 /* App-started ramp: the stock session-start marker (A5) with this in packet
  * byte 14 -- unread by stock firmware -- asks for the session it starts to run
  * as a ramp, on whatever preset is active, with every preset value left as it

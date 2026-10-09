@@ -87,9 +87,11 @@ and waits 800 ms. Leave about 400 ms between commands that write flash.
 | `0xB1`-`0xB5` | 0 | save flower stage 1-5 from the custom flower values | no |
 | `0xB6`-`0xBA` | 0 | save concentrate stage 1-5 from the custom concentrate values | no |
 | `0xBB` | offset, signed °F | set the setup offset for the built-in presets | no |
+| `0xBE` | preset number | choose the built-in preset a concentrate session runs with no stages saved: 0-5 on the Carta 2, 0-3 on the Aeris and Sport (Flavor first, Rosin / solventless, Balanced, Sauce / badder, Long session, Clouds); out of range is ignored | no |
 
 The patch ignores every marker while a ramp is running, and every marker except
-`0xBD` while ramps are switched off on the device.
+`0xBD` while ramps are switched off on the device. After `0xBB`, `0xBD` and
+`0xBE` the device announces itself with the new values.
 
 ### Stock mode
 

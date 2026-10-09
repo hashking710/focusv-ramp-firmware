@@ -659,6 +659,45 @@ static void t_announce_ramp(void)
     CHECK(seen_on && !ramp_active(ST()) && last_pkt[0] == 0xbc && !(last_pkt[8] & 0x04), "no 'ramp ended' announcement (flags %#x)", last_pkt[8]);
 }
 
+static void t_select_preset(void)
+{
+    struct run r;
+    printf("an app chooses the built-in preset (0xBE): stored, announced, run; refused out of range / stock mode / off\n");
+    reset_device(0);
+    tick();
+    ramp_marker_dispatch(RAMP_SELECT_MARKER, 5);                 /* Clouds */
+    tick();
+    CHECK(ramp_selected() == 5, "selected %d", ramp_selected());
+    CHECK(last_pkt[0] == 0xbc && last_pkt[9] == 5, "not announced (preset byte %d)", last_pkt[9]);
+    start_session(1, 150, 65, 30);
+    r = run_to_end(300);
+    CHECK(r.stages_seen == 4 && r.stage_temp[1] == 470 && r.stage_temp[4] == 520,
+          "didn't run Clouds: %d stages, %d .. %d", r.stages_seen, r.stage_temp[1], r.stage_temp[4]);
+
+    ramp_marker_dispatch(RAMP_SELECT_MARKER, DEV_PICK_COUNT);    /* out of range */
+    CHECK(ramp_selected() == 5, "an out-of-range choice was stored (%d)", ramp_selected());
+
+    ramp_picker_event(ST(), 15, 1, 15, 7, -1, 15, 9);             /* an open picker follows */
+    ramp_marker_dispatch(RAMP_SELECT_MARKER, 1);
+    CHECK(ST()->picker_sel == 1 && !ST()->picker_dirty && ramp_selected() == 1, "the open picker didn't follow");
+    ramp_picker_event(ST(), 15, 1, 15, 7, -1, 15, 9);             /* close: no write */
+    CHECK(ramp_selected() == 1, "closing the picker changed the choice");
+
+    ramp_marker_dispatch(RAMP_MODE_MARKER, RAMP_MODE_STOCK);
+    ramp_marker_dispatch(RAMP_SELECT_MARKER, 3);
+    CHECK(ramp_selected() == 1, "chosen in stock mode");
+    ramp_marker_dispatch(RAMP_MODE_MARKER, RAMP_MODE_RAMP);
+    ramp_toggle_enabled();                                        /* ramps off */
+    ramp_marker_dispatch(RAMP_SELECT_MARKER, 3);
+    CHECK(ramp_selected() == 1, "chosen with ramps off");
+    ramp_toggle_enabled();
+
+    last_pkt[0] = 0;
+    ramp_marker_dispatch(RAMP_OFFSET_MARKER, 7);                  /* the offset announces too */
+    tick();
+    CHECK(last_pkt[0] == 0xbc && (signed char)last_pkt[10] == 7, "offset change not announced");
+}
+
 static void t_rank_change(void)
 {
     int i;
@@ -766,6 +805,7 @@ int main(void)
     t_power_cut();
     t_mode_gesture();
     t_announce_ramp();
+    t_select_preset();
     t_picker_timeout();
     t_flash_writes();
     CHECK(write_too_long == 0, "%d flash writes longer than DEV_FLASH_WRITE_MAX", write_too_long);

@@ -42,7 +42,8 @@ by, or sponsored by Focus V.
   on the button light and the LEDs, triple click switches the ramp system on or off, hold leaves.
   During a ramp the button light shows the temperature colour. The choice and the on/off state are
   kept in flash. Outside the picker, every stock gesture behaves as before. The Carta 2 has no
-  picker: every button gesture on its idle screen already has a stock meaning.
+  picker: every button gesture on its idle screen already has a stock meaning. On every device,
+  Terpline (or any app, marker `0xBE`) can choose the built-in preset too.
 - **Starting a ramp.** From Terpline: the stock session start (marker 0xA5) with every current
   value echoed, so nothing is rewritten, and a ramp request (0x52) in packet byte 14, which stock
   never reads. The ramp runs on whatever preset is active, and that preset is put back exactly

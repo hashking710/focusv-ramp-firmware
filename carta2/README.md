@@ -104,8 +104,9 @@ hold cycles the presets, four clicks lock the device (`+0x82`, the app's "Device
 clicks + hold toggle low power, five clicks power off. A picker would have to shadow one of them, so
 it never opens (`DEV_PICK_ENTER` is a code no event has) and every button event outside a ramp goes
 to the stock consumer untouched. Ramps still start from Terpline or a 150 °F trigger slot, using the
-stored preset choice (Balanced until one is set). The picker code stays for a future entry that
-doesn't shadow a stock gesture -- for example a selection sent from Terpline.
+stored preset choice (Balanced until one is set), which Terpline -- or any app -- sets with marker
+`0xBE` ([PROTOCOL.md](../PROTOCOL.md)). The picker code stays for a future on-device entry that
+doesn't shadow a stock gesture.
 
 Earlier versions got the entry wrong three times: screen 0 (off / asleep, from the stock screen
 table read 0x28 bytes late -- the pointer `0x1a3c0` is a runtime address, the table is at

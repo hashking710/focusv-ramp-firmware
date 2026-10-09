@@ -131,6 +131,9 @@ typedef void (*flash_write_fn)(int addr, int len, void *buf);
 #define RAMP_VER_OFFSET      (RAMP_STORE_SIZE + 3)   /* store layout version */
 #define RAMP_STORE_TOTAL     (RAMP_STORE_SIZE + 4)
 #define RAMP_STORE_VERSION   1                       /* 0xFF (erased) = written before versions */
+/* The Carta 2 (0x964) and Aeris (0xa5c) page program doesn't split at 256-byte
+ * page boundaries, so the whole store must stay inside the sector's first page. */
+typedef char ramp_store_fits_one_page[(RAMP_STORE_TOTAL <= 256) ? 1 : -1];
 
 static inline u8 ramp_enabled(void)
 {

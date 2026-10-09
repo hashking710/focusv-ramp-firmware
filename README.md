@@ -106,8 +106,8 @@ compiles with `-Wall -Werror` and links the code at its real runtime address. It
 device's patch table into `apply_patch.py`, then checks everything below; any single failure
 stops it:
 
-- no undefined symbols, the code ends before the image end, and the store sector in `device.h`
-  lies outside both OTA banks
+- no undefined symbols, no variables in `.data` / `.bss` (the blob has no startup code), the code
+  ends before the image end, and the store sectors in `device.h` lie outside both OTA banks
 - every call into stock code lands on an **odd** address exactly **0x28 past a real function
   entry** in your file
 - every patch site decodes to exactly the expected stock instruction, and every caller of each

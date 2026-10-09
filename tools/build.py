@@ -180,6 +180,14 @@ def main():
 
         print(f'== {a.device}: blob ==')
         check(undef == ['_start'], f'no undefined symbols besides _start ({undef})')
+        # The blob has no startup code and links at flash addresses: a variable
+        # in .data / .bss would never be initialised, and writes to it would hit
+        # flash. All state lives in the RAM struct at DEV_RAMP_STATE.
+        nm_lines = [l.split() for l in open(f'{work}/nm') if l.strip()]
+        data_syms = [p[2] for p in nm_lines if len(p) == 3 and p[1] in 'bBdDcCgGsS']
+        bounds = {p[2]: int(p[0], 16) for p in nm_lines if len(p) == 3 and p[2] in ('__data_start', '_edata', '__bss_start', '__bss_end__')}
+        check(not data_syms and len(set(bounds.values())) == 1,
+              f'no variables in .data / .bss ({data_syms or bounds})')
         check(D['inject'] + BASE + len(blob) <= D['end'], f'{len(blob)} B running at {D["inject"] + BASE:#x} ends before the image end {D["end"]:#x}')
         # The store must survive whichever bank the image runs from: stock
         # erases the other bank at every boot (SDK 'clear new firmware area'

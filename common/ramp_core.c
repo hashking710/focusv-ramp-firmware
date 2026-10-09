@@ -290,6 +290,11 @@ static void ramp_tick(void)
         if (st->stage != 0)
             disarm(st);
         st->arm_failed = 0;
+        /* An app request the device didn't act on expires here: left set, it
+         * would look fresh again each time the 32-bit tick wraps (268 s at
+         * 16 MHz) and turn a session started later on the device into a ramp. */
+        if (st->start_req && DEV_SYS_TICK - st->start_req_t0 >= RAMP_REQUEST_TICKS)
+            st->start_req = 0;
         return;
     }
 

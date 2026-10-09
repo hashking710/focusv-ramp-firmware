@@ -698,6 +698,22 @@ static void t_select_preset(void)
     CHECK(last_pkt[0] == 0xbc && (signed char)last_pkt[10] == 7, "offset change not announced");
 }
 
+static void t_request_wrap(void)
+{
+    int i;
+    unsigned int t0;
+    printf("a dropped app request never comes back when the 32-bit tick wraps (every 268 s)\n");
+    reset_device(0);
+    tick();
+    ramp_marker_dispatch(RAMP_START_MARKER, RAMP_START_REQUEST);   /* the device drops the start */
+    t0 = ST()->start_req_t0;
+    for (i = 0; i < 6000 && !(sim_systick - t0 < 16000000u / TPS * 2 && i > 100); i++) tick();
+    CHECK(sim_systick - t0 < 16000000u / TPS * 2, "the tick didn't wrap round to the request (%u)", sim_systick - t0);
+    start_on_rank(1, 2, 480, 248, 40);                             /* a session from the device */
+    for (i = 0; i < 5; i++) tick();
+    CHECK(ST()->stage == 0, "a stale request armed a device-started session after the wrap");
+}
+
 static void t_rank_change(void)
 {
     int i;
@@ -806,6 +822,7 @@ int main(void)
     t_mode_gesture();
     t_announce_ramp();
     t_select_preset();
+    t_request_wrap();
     t_picker_timeout();
     t_flash_writes();
     CHECK(write_too_long == 0, "%d flash writes longer than DEV_FLASH_WRITE_MAX", write_too_long);

@@ -10,7 +10,7 @@
 Runs a Terpline-uploaded ramp of up to 5 stages on the device itself. While a ramp runs, the
 heating screen is replaced by the ramp screen, and the buttons change meaning.
 
-![Mockup of the ramp screen](ramp-mockup.png)
+![The ramp screen, as the display test renders it from the real drawing code](ramp-mockup.png)
 
 *A rendered mockup, not a photo: the screen's drawing logic run against the real glyph
 bitmaps from this build. Scenario: stage 3 of 5, 41 s into a 75 s stage, 68% battery. The

@@ -48,6 +48,11 @@ Builds: Carta 2 PROD-111224, Aeris PROD-111224, Carta Sport PROD-030426.
 | Ring and button share PWM0 / DMA7 (Sport): pushed button -> rail -> ring, from the dispatcher site | traced (0x8efc, 0x8cf8, 0x8ff8 tail) |
 | Animation gate (blinks +5, fades +6 / +7, level +1, warning effect 9) | traced (Sport 0x8ff8, 0x9976; Aeris 0x920c, 0x9b62); nothing else writes those fields |
 | Aeris LED rail pin (0x84317c) and OTA flag (0x843184) | traced (0x920c tail) |
+| Sport timer (0x8448, current build): 50-call prescaler (0x844736) -> 1 s; clears the UI idle counter (0x842694 +0x42) during a session; returns while reached (+0x1) is 0; at +0x1a = 0: stop 0x6a98 first, then the counters, d[31] = 200 / d[32] = 250, cue 0x842870 +3 = 5 / +4 = 2 | traced: matches device.h and count_dab (flower +0, 4, 6, 10, 14 / concentrate +2, 4, 8, 12, 16, u16 each, 0x8596 / 0x8476) |
+| Sport: a ramp ending at countdown 1 can't be counted a second time | traced: 0x6a98 clears the session flag (+0) before returning (0x6ada), and logs the timestamp (0x6240); the timer, which runs before the ramp tick in each main-loop pass (0x57d6, then 0x58b0), does nothing with no session |
+| Sport "+10 s" (double click / app event 20 mid-session) | traced (0x4656-0x4684): adds 10 to the countdown (0x842694 +0x72 = 0x8426ec +0x1a) and to the session length 0x844732 (LED progress only; also set at 0x8040 when the hold loads); plays a stock LED cue. During a ramp the countdown change is undone, so it has no effect beyond the cue |
+| Sport LED addresses in the current build | traced: ring buffer 0x8427f8 and animation block 0x844b3c read by both the push (0x8cf8) and the dispatcher (0x8ff8); button u16s 0x844b0c / 0x844b12 / 0x844b0e in the button push (0x8efc) and the dispatcher tail; LED rail PA_OUT 0x800583 in 0x8efc; the gate: blink count +5, level +1 (forced to 100 while blinking), effect +0 == 9 (0x9010-0x904e) |
+| Sport UI state 2 (dispatcher skips to 0x970e) | traced: entered only at 0x59e0, which stops the session first, so a ramp disarms on the next tick; at most one LED pass (10 ms) of ramp colours before stock's own effect refills the buffer |
 | Colours, brightness, flicker, the session-start blinks then the ramp | hardware |
 | Hold length in seconds (scanner runs every 100th timer interrupt) | hardware |
 

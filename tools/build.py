@@ -15,7 +15,8 @@ Needs Docker and a Linux TC32 toolchain directory (tc32-elf-gcc/as/ld/objcopy/
 objdump/nm in <dir>/bin), given by --toolchain or $TC32_TOOLCHAIN.
 
 What it checks (a single FAIL stops it before apply_patch.py is touched):
-  - no undefined symbols; the blob fits before the waypoint sector
+  - no undefined symbols; the blob fits before the image end; the ramp store
+    sector (device.h) lies outside both OTA banks
   - every call from the blob into stock code targets an ODD address -- TC32
     `tjex` treats bit 0 like Arm `bx`, so an even target would fault
   - each call site's original bytes decode to exactly the expected stock
@@ -25,7 +26,7 @@ What it checks (a single FAIL stops it before apply_patch.py is touched):
     its wrapper
   - end to end: apply_patch.py on your file -> every site holds its
     replacement, zero other body bytes change, the gap is 0xFF, the blob sits
-    exactly at its address, the waypoint sector is erased, the header length and
+    exactly at its address, the header length and
     Telink CRC32 trailer are correct
 """
 import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
@@ -44,7 +45,7 @@ DEVICES = {
     'carta2': dict(
         src=['common/ramp_core.c', 'common/ramp_store.c', 'common/ramp_picker.c', 'common/ramp_presets.c', 'common/ramp_announce.c', 'carta2/ramp_display.c', 'carta2/ramp_input.c'],
         asm=['carta2/ramp_marker_entry.s'],
-        inject=0x30000, wp=0x32000, end=0x33000, ota_max=248 << 10,
+        inject=0x30000, end=0x33000, ota_max=248 << 10, bank=0x40000, store=0xf0000,
         sites=[(0x6e2e, 'ramp_trampoline', 'tjl 0xaf2c'),
                (0x11d96, 'ramp_marker_entry', 'tmovs r3, #40'),
                (0x6d0c, 'ramp_event_entry', 'tjl 0x5618'),
@@ -67,7 +68,7 @@ DEVICES = {
     'aeris': dict(
         src=['common/ramp_core.c', 'common/ramp_store.c', 'common/ramp_picker.c', 'common/ramp_presets.c', 'common/ramp_announce.c', 'aeris/ramp_led.c', 'aeris/ramp_event.c'],
         asm=['aeris/ramp_marker_entry.s'],
-        inject=0x14000, wp=0x16000, end=0x17000, ota_max=124 << 10,
+        inject=0x14000, end=0x17000, ota_max=124 << 10, bank=0x20000, store=0x70000,
         sites=[(0x6464, 'ramp_trampoline', 'tjl 0x8154'),
                (0xb490, 'ramp_marker_entry', 'tmovs r3, #53'),
                (0x645c, 'ramp_event_entry', 'tjl 0x4ee8'),
@@ -78,7 +79,7 @@ DEVICES = {
     'sport': dict(
         src=['common/ramp_core.c', 'common/ramp_store.c', 'common/ramp_picker.c', 'common/ramp_presets.c', 'common/ramp_announce.c', 'sport/ramp_led.c', 'sport/ramp_event.c'],
         asm=['sport/ramp_marker_entry.s'],
-        inject=0x18000, wp=0x1a000, end=0x1b000, ota_max=124 << 10,
+        inject=0x18000, end=0x1b000, ota_max=124 << 10, bank=0x20000, store=0x70000,
         sites=[(0x58b0, 'ramp_trampoline', 'tjl 0x7c00'),
                (0xb002, 'ramp_marker_entry', 'tmovs r3, #53'),
                (0x58a8, 'ramp_event_entry', 'tjl 0x45cc'),
@@ -179,7 +180,15 @@ def main():
 
         print(f'== {a.device}: blob ==')
         check(undef == ['_start'], f'no undefined symbols besides _start ({undef})')
-        check(D['inject'] + BASE + len(blob) <= D['wp'], f'{len(blob)} B running at {D["inject"] + BASE:#x} ends before the waypoint sector {D["wp"]:#x}')
+        check(D['inject'] + BASE + len(blob) <= D['end'], f'{len(blob)} B running at {D["inject"] + BASE:#x} ends before the image end {D["end"]:#x}')
+        # The store must survive whichever bank the image runs from: stock
+        # erases the other bank at every boot (SDK 'clear new firmware area'
+        # and the app's own wipe), so a store inside either bank is lost.
+        dev_store = re.search(r'#define DEV_RAMP_FLASH\s+(0x[0-9a-fA-F]+)', open(f'{REPO}/{a.device}/device.h').read())
+        check(dev_store is not None and int(dev_store.group(1), 16) == D['store'],
+              f'device.h DEV_RAMP_FLASH is the store sector {D["store"]:#x}')
+        check(D['store'] % 0x1000 == 0 and D['store'] >= 2 * D['bank'],
+              f'store sector {D["store"]:#x} lies outside both OTA banks (0..{2 * D["bank"]:#x})')
         ins, order, words = parse_dis(open(f'{work}/blob.dis').read())
         n, even = 0, []
         for i, x in enumerate(order):
@@ -248,7 +257,6 @@ def main():
         check(stray == 0, f'zero bytes changed outside the patch sites ({stray})')
         check(set(out[HDR + blen:HDR + D['inject']]) == {0xFF}, 'gap up to the blob is 0xFF')
         check(out[HDR + D['inject']:HDR + D['inject'] + len(blob)] == blob, 'blob placed exactly at its address')
-        check(len(out) >= D['wp'] + 0x1000 and set(out[D['wp']:D['wp'] + 0x1000]) == {0xFF}, f'waypoint sector (flash {D["wp"]:#x}) erased in the image')
         check(struct.unpack('<I', out[24:28])[0] == len(out), 'header length field == file size')
         check(struct.unpack('<I', out[-4:])[0] == crc32_telink(out[:-4]), 'Telink CRC32 trailer correct')
         check(out[8:12] == b'KNLT' and out[:24] == stock[:24], 'header intact')

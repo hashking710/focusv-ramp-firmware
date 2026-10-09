@@ -133,22 +133,31 @@ typedef void (*flash_write_fn)(int addr, int len, void *buf);
 #define RAMP_SEL_OFFSET      (RAMP_STORE_SIZE + 1)   /* the chosen built-in preset */
 #define RAMP_OFS_OFFSET      (RAMP_STORE_SIZE + 2)   /* setup offset, signed F */
 #define RAMP_VER_OFFSET      (RAMP_STORE_SIZE + 3)   /* store layout version */
-#define RAMP_STORE_TOTAL     (RAMP_STORE_SIZE + 4)
-#define RAMP_STORE_VERSION   1                       /* 0xFF (erased) = written before versions */
+#define RAMP_MODE_OFFSET     (RAMP_STORE_SIZE + 4)   /* RAMP_MODE_STOCK, or anything else = ramp mode */
+#define RAMP_STORE_TOTAL     (RAMP_STORE_SIZE + 5)
+#define RAMP_STORE_VERSION   2                       /* 0xFF (erased) = written before versions */
 /* The Carta 2 (0x964) and Aeris (0xa5c) page program doesn't split at 256-byte
  * page boundaries, so the whole store must stay inside the sector's first page. */
 typedef char ramp_store_fits_one_page[(RAMP_STORE_TOTAL <= 256) ? 1 : -1];
 
-static inline u8 ramp_enabled(void)
-{
-    u8 b;
-    /* flash_read, not memory-mapped: the toggle that writes this byte can
-     * fire on the tick right before this is checked (click -> this tick's
-     * ramp_tick), which is exactly the stale-mapped-read window described
-     * above -- so this follows the same rule as the rest of the store. */
-    flash_read(DEV_RAMP_FLASH + RAMP_ENABLED_OFFSET, 1, &b);
-    return b != 0;
-}
+/* Read through flash_read, not memory-mapped (see above), and only from a
+ * sector that holds a store (magic checked): anything else reads as erased. */
+u8 ramp_enabled(void);
+
+/* ---- stock mode -------------------------------------------------------------
+ * A persisted switch, set from the app (RAMP_MODE_MARKER), that turns the
+ * whole patch into a pass-through: no ramp ever arms, every button event and
+ * every LED pass goes to stock untouched, the Carta 2's screen is stock (its
+ * hooks only act during a ramp), and every marker but this one is ignored.
+ * The marker hook and the announcement stay, so an app can find the device
+ * and switch it back. Erased flash is ramp mode, so a new store behaves as
+ * before. Cached in RAM (ramp_state_t.stock_mode) once the state is set up;
+ * the switch is refused while a ramp runs. */
+#define RAMP_MODE_MARKER     0xbd
+#define RAMP_MODE_STOCK      0x53   /* 'S' in packet byte 14 */
+#define RAMP_MODE_RAMP       0x52   /* 'R' */
+u8 ramp_stock_mode(void);
+u8 ramp_store_stock_mode(void);   /* from flash, bypassing the cache */
 
 /* Built-in presets (ramp_presets.c). Each device exposes DEV_PICK_COUNT of
  * them through its picker; an erased selection means the Balanced preset. */
@@ -247,8 +256,9 @@ typedef struct {
                        * went down (not woken from standby by that press) */
     u16 heat_s;       /* seconds this stage has spent heating, not at temperature */
     u32 heat_t0;      /* Aeris/Sport: system tick heat_s was last advanced at */
+    u8  stock_mode;   /* cache of the store's mode byte (ramp_stock_mode) */
     u16 ann_tries;    /* announcement send attempts left (ramp_announce.c) */
-    u8  ann_enabled;  /* the announcement's fields, captured when it's queued */
+    u8  ann_flags;    /* the announcement's fields, captured when it's queued */
     u8  ann_preset;
     u8  ann_offset;
     u8  frame_drawn;  /* display bookkeeping (Carta 2 screen) */
@@ -307,6 +317,7 @@ extern const u8 RAMP_PRESET_RGB[6][3];   /* ramp_presets.c */
 void ramp_toggle_enabled(void);
 u8   ramp_default_stages(volatile ramp_state_t *st, u8 sel);
 void ramp_announce_tick(volatile ramp_state_t *st);
+void ramp_announce_queue(volatile ramp_state_t *st);
 void ramp_picker_close(volatile ramp_state_t *st);
 /* A device state in which a sentinel session must stay a stock session (Aeris
  * and Sport: quick heat, UI state 7). */

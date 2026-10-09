@@ -133,7 +133,7 @@ void ramp_led_entry(void)
 {
     volatile ramp_state_t *st = RAMP_STATE;
 
-    if (st->magic != RAMP_MAGIC || LED_ENABLED == 0 || stock_animating()) {
+    if (st->magic != RAMP_MAGIC || st->stock_mode || LED_ENABLED == 0 || stock_animating()) {
         stock_led_dispatch();
         return;
     }

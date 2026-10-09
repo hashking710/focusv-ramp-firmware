@@ -234,6 +234,7 @@ static void ramp_tick(void)
     u8 s;
 
     if (st->magic != RAMP_MAGIC) {
+        st->stock_mode = ramp_store_stock_mode();   /* before the magic makes it the answer */
         st->magic = RAMP_MAGIC;
         st->stage = 0;
         st->arm_failed = 0;
@@ -248,6 +249,18 @@ static void ramp_tick(void)
     }
 
     ramp_announce_tick(st);
+
+    /* Stock mode: nothing but the announcement above. A ramp can't be running
+     * (the switch is refused during one), but if one somehow is, it ends the
+     * normal way, slot restored. */
+    if (st->stock_mode) {
+        if (st->stage != 0)
+            disarm(st);
+        st->picker_on = 0;
+        st->picker_dirty = 0;
+        st->start_req = 0;
+        return;
+    }
 
     if (st->picker_on && DEV_SYS_TICK - st->picker_t0 > RAMP_PICKER_TIMEOUT) {
         ramp_picker_close(st);

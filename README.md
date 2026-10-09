@@ -28,6 +28,11 @@ by, or sponsored by Focus V.
 - **Ramps from Terpline or the device.** Terpline uploads up to 5 stages per mode (flower /
   concentrate), each a temperature plus a hold time, stored in their own flash sector. The device
   also ships six built-in concentrate ramps (the same profiles as Terpline's presets).
+- **Stock mode, switchable from any app.** One packet switches the patch into a pass-through:
+  buttons, screen, lights and sessions behave exactly like stock firmware, and no ramp starts.
+  Another switches it back. Saved ramps and settings are kept, the mode survives power-off, and
+  the device keeps announcing itself so it can always be switched back. Terpline has the switch;
+  [PROTOCOL.md](PROTOCOL.md) documents every packet for other apps.
 - **Choosing a built-in ramp, and on/off, on the device (Aeris and Sport).** A hold from idle (a
   single press, LEDs on) opens a picker: single clicks step through four presets, shown in colour
   on the button light and the LEDs, triple click switches the ramp system on or off, hold leaves.
@@ -96,7 +101,8 @@ compiles with `-Wall -Werror` and links the code at its real runtime address. It
 device's patch table into `apply_patch.py`, then checks everything below; any single failure
 stops it:
 
-- no undefined symbols, and the code ends before the waypoint sector
+- no undefined symbols, the code ends before the image end, and the store sector in `device.h`
+  lies outside both OTA banks
 - every call into stock code lands on an **odd** address exactly **0x28 past a real function
   entry** in your file
 - every patch site decodes to exactly the expected stock instruction, and every caller of each
@@ -105,7 +111,7 @@ stops it:
 - end to end, `apply_patch.py` run on your file:
   - every site holds its replacement, and zero other stock bytes change
   - the blob is placed exactly at its address, with 0xFF filling the gap before it
-  - the waypoint sector ships erased, and no flash sector past the image is touched
+  - no flash sector past the image is touched
   - the header length and Telink CRC32 are correct
 - the finished image is re-disassembled with the real `tc32-elf-objdump`, and every site must
   decode to a call to its function: an independent cross-check of the build's own decoder
@@ -147,11 +153,11 @@ aeris/ramp_led.c, sport/ramp_led.c           LED progress
 tools/build.py                               build + verification
 ```
 
-| Device | Firmware build | Patch sites | Code / waypoint sector |
+| Device | Firmware build | Patch sites | Code / store sector |
 | --- | --- | --- | --- |
-| [`carta2/`](carta2/) | PROD-111224 | 33 | 0x30000 / 0x32000 |
-| [`aeris/`](aeris/) | PROD-111224 | 5 | 0x14000 / 0x16000 |
-| [`sport/`](sport/) | PROD-030426 | 5 | 0x18000 / 0x1a000 |
+| [`carta2/`](carta2/) | PROD-111224 | 33 | 0x30000 / 0xf0000 |
+| [`aeris/`](aeris/) | PROD-111224 | 5 | 0x14000 / 0x70000 |
+| [`sport/`](sport/) | PROD-030426 | 5 | 0x18000 / 0x70000 |
 
 ## History
 

@@ -487,6 +487,79 @@ static void t_app_request(void)
     CHECK(ST()->stage == 0, "armed without a request");
 }
 
+static void announce_now(void)
+{
+    static const unsigned char aa[19] = { 0xaa };
+    ramp_announce_entry(27, aa, 19);
+    tick();
+}
+
+static void t_stock_mode(void)
+{
+    struct run r;
+    int e;
+    printf("stock mode: nothing arms, no marker but the switch acts; switching back restores ramps\n");
+    reset_device(0);
+    tick();
+    upload(1, 1, 430, 221, 12);
+    announce_now();
+    CHECK(last_pkt[6] == 2 && last_pkt[8] == 0x01, "ramp mode announce: protocol %d flags %#x", last_pkt[6], last_pkt[8]);
+
+    ramp_marker_dispatch(RAMP_MODE_MARKER, RAMP_MODE_STOCK);
+    CHECK(ramp_stock_mode() && ST()->stock_mode == 1, "not in stock mode");
+    CHECK(flash[RAMP_MODE_OFFSET] == RAMP_MODE_STOCK, "mode byte %#x", flash[RAMP_MODE_OFFSET]);
+    tick();
+    CHECK(last_pkt[0] == 0xbc && last_pkt[8] == 0x03, "the switch should announce stock mode at once: flags %#x", last_pkt[8]);
+
+    e = erases;
+    upload(1, 1, 480, 249, 30);                                   /* ignored */
+    ramp_marker_dispatch(RAMP_OFFSET_MARKER, 10);                  /* ignored */
+    ramp_marker_dispatch(RAMP_START_MARKER, RAMP_START_REQUEST);   /* ignored */
+    CHECK(erases == e && ramp_offset() == 0 && ST()->start_req == 0, "a marker acted in stock mode");
+    start_session(1, 150, 65, 5);                                  /* the sentinel: a plain session */
+    r = run_to_end(200);
+    CHECK(r.stages_seen == 0 && u16at(sim_struct, TBL_CO_F * 2) == 150, "armed in stock mode (%d stages)", r.stages_seen);
+    CHECK(u16at(sim_dab, 2) == 1, "stock completion should count it once: %d", u16at(sim_dab, 2));
+
+    memset(sim_state, 0xa7, sizeof sim_state);                     /* power cycle: RAM lost */
+    CHECK(ramp_stock_mode(), "stock mode lost before the first tick");
+    tick();
+    CHECK(ST()->stock_mode == 1, "stock mode lost after a power cycle");
+
+    ramp_marker_dispatch(RAMP_MODE_MARKER, 0x00);                  /* not a mode code: ignored */
+    CHECK(ramp_stock_mode(), "an unknown code changed the mode");
+    ramp_marker_dispatch(RAMP_MODE_MARKER, RAMP_MODE_RAMP);
+    CHECK(!ramp_stock_mode() && flash[RAMP_MODE_OFFSET] == 0xff, "not back in ramp mode");
+    start_session(1, 150, 65, 30);
+    r = run_to_end(300);
+    CHECK(r.stages_seen == 1 && r.stage_temp[1] == 430, "the saved ramp didn't survive stock mode: %d stages", r.stages_seen);
+
+    printf("the mode switch is refused while a ramp runs\n");
+    start_session(1, 150, 65, 30);
+    tick();
+    CHECK(ramp_active(ST()), "ramp didn't arm");
+    ramp_marker_dispatch(RAMP_MODE_MARKER, RAMP_MODE_STOCK);
+    CHECK(!ramp_stock_mode() && flash[RAMP_MODE_OFFSET] == 0xff, "switched mid-ramp");
+}
+
+static void t_foreign_sector(void)
+{
+    struct run r;
+    printf("a store sector holding something else reads as erased, and the first save replaces it\n");
+    reset_device(0);
+    memset(flash, 0x00, sizeof flash);   /* no magic; every byte a would-be setting */
+    flash[RAMP_MODE_OFFSET] = RAMP_MODE_STOCK;
+    tick();
+    CHECK(ramp_enabled() && ramp_selected() == RAMP_DEFAULT_PRESET && ramp_offset() == 0 && !ramp_stock_mode(),
+          "read a setting from a foreign sector: en %d sel %d ofs %d stock %d",
+          ramp_enabled(), ramp_selected(), ramp_offset(), ramp_stock_mode());
+    start_session(1, 150, 65, 30);
+    r = run_to_end(300);
+    CHECK(r.stages_seen == 4, "default preset didn't run: %d stages", r.stages_seen);
+    ramp_marker_dispatch(RAMP_OFFSET_MARKER, 5);
+    CHECK(u16at(flash, 0) == RAMP_STORE_MAGIC && ramp_offset() == 5 && ramp_enabled(), "first save didn't make a clean store");
+}
+
 static void t_picker_timeout(void)
 {
     volatile ramp_state_t *st;
@@ -546,6 +619,8 @@ int main(void)
     t_heat_cap_waits();
     t_save_held();
     t_app_request();
+    t_stock_mode();
+    t_foreign_sector();
     t_picker_timeout();
     t_flash_writes();
     CHECK(write_too_long == 0, "%d flash writes longer than DEV_FLASH_WRITE_MAX", write_too_long);

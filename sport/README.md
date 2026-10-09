@@ -41,9 +41,11 @@ Body:    90,860 bytes (after the 40-byte header), SHA-1 4b57f086a175...
 | 0x57ee | call to the LED effect dispatcher `0x8ff8` (the only caller) | `ramp_led_entry`: button light and LEDs while a ramp or the picker owns them, else the stock effects |
 | 0xa9ea | stock send of the `0xAA` dab-counter reply (notify `0xec3c`) | `ramp_announce_entry`: sends it unchanged, then announces the patch (`0xBC`) |
 
-The code goes at flash 0x18000 and runs at 0x18028, with 8 KB to grow into. The waypoint store has
-its own sector at 0x1a000, and the output image ends with it, at 0x1b000 (110,596 bytes with the
-trailer). The stock
+The code goes at flash 0x18000 and runs at 0x18028, with 12 KB to grow into, and the output image
+ends at 0x1b000 (110,596 bytes with the trailer). The ramp store has its own sector at 0x70000,
+outside both OTA banks: stock erases the bank it isn't running from at every boot, so a store
+inside the image would be lost after an OTA install. Every stock erase site is traced in
+[`device.h`](device.h); nothing stock touches 0x61000-0x73fff. The stock
 OTA accepts at most 124 KB: `main()` calls the SDK's `bls_ota_set_fwSize_and_fwBootAddr(124,
 0x20000)`, and the OTA start rejects a larger header length. An earlier version ended the image at
 0x20000 (128 KB + 4), which the stock OTA would have refused. An earlier version still put the

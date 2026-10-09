@@ -23,7 +23,7 @@ Safeguards -- nothing is written unless ALL of these hold:
   - every patch site holds exactly the expected stock instruction
   - the stock image ends before the patch's code region
   - the blob is the one this patch table was generated for (SHA-256), and it
-    ends before the waypoint sector
+    ends before the image end
 
 The output is a complete OTA image (header + body + fresh Telink CRC32
 trailer). Keep your original file: flashing it back is a full revert.
@@ -48,28 +48,28 @@ LENGTH_FIELD_OFFSET = 24
 
 # Flash layout (physical address = file offset). The blob goes at file offset
 # HEADER_LEN + CODE_INJECT_ADDR, so it runs at CODE_INJECT_ADDR + 0x28, where
-# tools/build.py links it; the waypoint store has its own sector after it, and
-# the image ends with that sector. The stock OTA accepts at most 124 KB (main()
+# tools/build.py links it, and the image ends at IMAGE_END_ADDR. The ramp
+# store is NOT in the image: it has its own sector outside both OTA banks
+# (DEV_RAMP_FLASH in device.h), because stock erases the other bank at boot. The stock OTA accepts at most 124 KB (main()
 # calls bls_ota_set_fwSize_and_fwBootAddr(124, 0x20000); the OTA start rejects
 # a larger header length), so the image must stay under OTA_MAX_IMAGE.
 CODE_INJECT_ADDR = 0x18000
-WAYPOINT_SECTOR = 0x1A000
 IMAGE_END_ADDR = 0x1B000
 OTA_MAX_IMAGE = 124 << 10
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_sport_v1.bin"   # built locally, never published
-BLOB_SHA256 = "da1e86e80f2a18f6297d9eb5a1cbee9bea90469955682b1d2cb3b9ed465ae3e8"   # written by tools/build.py
+BLOB_SHA256 = "9faeb5284603b569aba54379ec56425b7dafbf49095db09969a65f305d1061f2"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock
 # instruction; each replacement is the real assembler's `tjl` to the named
 # function in the blob above.
 PATCHES = [
-    (0x57EE, bytes.fromhex("0390039c"), bytes.fromhex("1390b99a")),  # tjl 0x8ff8 -> ramp_led_entry
-    (0x58A8, bytes.fromhex("fe97909e"), bytes.fromhex("1390bc9b")),  # tjl 0x45cc -> ramp_event_entry
+    (0x57EE, bytes.fromhex("0390039c"), bytes.fromhex("1390e59a")),  # tjl 0x8ff8 -> ramp_led_entry
+    (0x58A8, bytes.fromhex("fe97909e"), bytes.fromhex("1390f09b")),  # tjl 0x45cc -> ramp_event_entry
     (0x58B0, bytes.fromhex("0290a699"), bytes.fromhex("1290849c")),  # tjl 0x7c00 -> ramp_trampoline
-    (0xA9EA, bytes.fromhex("04902799"), bytes.fromhex("0e902399")),  # tjl 0xec3c -> ramp_announce_entry
-    (0xB002, bytes.fromhex("35a3fb1c"), bytes.fromhex("0e908d98")),  # tmovs r3, #53 -> ramp_marker_entry
+    (0xA9EA, bytes.fromhex("04902799"), bytes.fromhex("0e907399")),  # tjl 0xec3c -> ramp_announce_entry
+    (0xB002, bytes.fromhex("35a3fb1c"), bytes.fromhex("0e90c798")),  # tmovs r3, #53 -> ramp_marker_entry
 ]
 
 
@@ -123,14 +123,13 @@ def main() -> int:
     if hashlib.sha256(code_blob).hexdigest() != BLOB_SHA256:
         return fail(f"{CODE_BLOB_PATH.name} is not the blob this patch table was generated for -- "
                     "rebuild with tools/build.py")
-    if HEADER_LEN + CODE_INJECT_ADDR + len(code_blob) > WAYPOINT_SECTOR:
-        return fail("the code blob would run into the waypoint sector")
+    if HEADER_LEN + CODE_INJECT_ADDR + len(code_blob) > IMAGE_END_ADDR:
+        return fail("the code blob would run past the image end")
 
     for addr, _, replacement in PATCHES:
         body[addr:addr + len(replacement)] = replacement
     # Grow the image with erased flash (0xFF) up to IMAGE_END_ADDR: the stock
-    # trailer left at the end of `body` sits unused in this gap, and the
-    # waypoint sector ships erased, so a flash always starts with an empty store.
+    # trailer left at the end of `body` sits unused in this gap.
     body.extend(b"\xff" * (IMAGE_END_ADDR - HEADER_LEN - len(body)))
     body[CODE_INJECT_ADDR:CODE_INJECT_ADDR + len(code_blob)] = code_blob
 

@@ -4,9 +4,11 @@
  * (part of the sync burst the app triggers on connect). The reply is sent
  * unchanged, then a signature packet is queued for the next ticks:
  *
- *   [BC, 0C, 'T','R','M','P', protocol, device, enabled, preset, offset, BC]
+ *   [BC, 0C, 'T','R','M','P', protocol, device, flags, preset, offset, BC]
  *
- * device: 1 Carta 2, 2 Aeris, 3 Sport. offset: signed F. Stock firmware never
+ * device: 1 Carta 2, 2 Aeris, 3 Sport. flags (protocol 2): bit 0 ramps
+ * enabled, bit 1 stock mode (protocol 1 sent 0 / 1 = enabled there).
+ * offset: signed F. It's also queued after a mode switch. Stock firmware never
  * sends 0xBC, and nothing extra is sent to a stock device. Sent from the tick
  * rather than right after the 0xAA reply because the notify queue refuses
  * packets while the sync burst fills it (non-zero return); the fields are read
@@ -15,7 +17,9 @@
 
 #define ANNOUNCE_OP        0xbc
 #define ANNOUNCE_LEN       12
-#define ANNOUNCE_PROTOCOL  1
+#define ANNOUNCE_PROTOCOL  2
+#define ANNOUNCE_ENABLED   0x01
+#define ANNOUNCE_STOCK     0x02
 /* Main-loop passes to keep retrying: the sync burst fills the notify queue
  * and it drains over several connection intervals, so this has to outlast that. */
 #define ANNOUNCE_TRIES     0xffff
@@ -23,16 +27,21 @@
 typedef int (*notify_fn)(int handle, const u8 *data, int len);
 #define stock_notify  STOCK_FN(notify_fn, DEV_NOTIFY)
 
+/* Captures the fields now and leaves the sending to ramp_announce_tick. */
+void ramp_announce_queue(volatile ramp_state_t *st)
+{
+    st->ann_flags = (ramp_enabled() ? ANNOUNCE_ENABLED : 0) | (st->stock_mode ? ANNOUNCE_STOCK : 0);
+    st->ann_preset = ramp_selected();
+    st->ann_offset = (u8)ramp_offset();
+    st->ann_tries = ANNOUNCE_TRIES;
+}
+
 int ramp_announce_entry(int handle, const u8 *data, int len)
 {
     int r = stock_notify(handle, data, len);
     volatile ramp_state_t *st = RAMP_STATE;
-    if (st->magic == RAMP_MAGIC) {
-        st->ann_enabled = ramp_enabled() ? 1 : 0;
-        st->ann_preset = ramp_selected();
-        st->ann_offset = (u8)ramp_offset();
-        st->ann_tries = ANNOUNCE_TRIES;
-    }
+    if (st->magic == RAMP_MAGIC)
+        ramp_announce_queue(st);
     return r;
 }
 
@@ -47,7 +56,7 @@ void ramp_announce_tick(volatile ramp_state_t *st)
     pkt[2] = 'T'; pkt[3] = 'R'; pkt[4] = 'M'; pkt[5] = 'P';
     pkt[6] = ANNOUNCE_PROTOCOL;
     pkt[7] = DEV_ID;
-    pkt[8] = st->ann_enabled;
+    pkt[8] = st->ann_flags;
     pkt[9] = st->ann_preset;
     pkt[10] = st->ann_offset;
     pkt[11] = ANNOUNCE_OP;

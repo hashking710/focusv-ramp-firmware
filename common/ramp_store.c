@@ -82,17 +82,63 @@ static void save_waypoint(u8 bank, u8 slot, u16 f, u16 c, u16 hold)
     store_commit(buf);
 }
 
+/* One byte of the store, or 0xFF (erased) if the sector holds no store --
+ * whatever else might be there is never read as a setting. */
+static u8 store_byte(u8 off)
+{
+    u8 b[2];
+    flash_read(DEV_RAMP_FLASH, 2, b);
+    if (b[0] != (u8)RAMP_STORE_MAGIC || b[1] != (u8)(RAMP_STORE_MAGIC >> 8))
+        return 0xff;
+    flash_read(DEV_RAMP_FLASH + off, 1, b);
+    return b[0];
+}
+
+u8 ramp_enabled(void)
+{
+    return store_byte(RAMP_ENABLED_OFFSET) != 0;
+}
+
+u8 ramp_store_stock_mode(void)
+{
+    return store_byte(RAMP_MODE_OFFSET) == RAMP_MODE_STOCK;
+}
+
+u8 ramp_stock_mode(void)
+{
+    volatile ramp_state_t *st = RAMP_STATE;
+    if (st->magic == RAMP_MAGIC)
+        return st->stock_mode;
+    return ramp_store_stock_mode();   /* before the first tick sets the cache */
+}
+
 void ramp_marker_dispatch(u8 marker, u8 byte14)
 {
-    if (ramp_active(RAMP_STATE))
+    volatile ramp_state_t *st = RAMP_STATE;
+
+    if (ramp_active(st))
         return;   /* never rewrite the store under a running ramp */
+
+    /* The mode switch works in either mode, ramps on or off. */
+    if (marker == RAMP_MODE_MARKER) {
+        if (byte14 == RAMP_MODE_STOCK || byte14 == RAMP_MODE_RAMP) {
+            ramp_store_set(RAMP_MODE_OFFSET, byte14 == RAMP_MODE_STOCK ? RAMP_MODE_STOCK : 0xff);
+            if (st->magic == RAMP_MAGIC) {
+                st->stock_mode = ramp_store_stock_mode();   /* what flash now holds */
+                ramp_announce_queue(st);                    /* tell the app at once */
+            }
+        }
+        return;
+    }
+    if (ramp_stock_mode())
+        return;   /* stock mode: nothing but the switch above */
     if (!ramp_enabled())
         return;   /* disabled: no flash write of any kind, full stop */
 
     if (marker == RAMP_START_MARKER) {
         if (byte14 == RAMP_START_REQUEST) {   /* see ramp.h: no flash involved */
-            RAMP_STATE->start_req = 1;
-            RAMP_STATE->start_req_t0 = DEV_SYS_TICK;
+            st->start_req = 1;
+            st->start_req_t0 = DEV_SYS_TICK;
         }
         return;
     }
@@ -129,16 +175,14 @@ void ramp_toggle_enabled(void)
 
 u8 ramp_selected(void)
 {
-    u8 b;
-    flash_read(DEV_RAMP_FLASH + RAMP_SEL_OFFSET, 1, &b);
+    u8 b = store_byte(RAMP_SEL_OFFSET);
     return (b < DEV_PICK_COUNT) ? b : RAMP_DEFAULT_PRESET;
 }
 
 int ramp_offset(void)
 {
-    u8 b;
+    u8 b = store_byte(RAMP_OFS_OFFSET);
     int v;
-    flash_read(DEV_RAMP_FLASH + RAMP_OFS_OFFSET, 1, &b);
     if (b == 0xff)
         return 0;
     v = (signed char)b;

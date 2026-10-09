@@ -56,7 +56,15 @@
 #define DEV_STOP            0x7200
 #define DEV_ROM_DIV         0x1ac
 
-#define DEV_RAMP_FLASH      0x16000   /* code gets 0x14000-0x15fff */
+/* The ramp store's own sector, outside both OTA banks: stock erases the bank
+ * it isn't running from at every boot (the SDK's init and the app's wipe
+ * loops 0x6004 / 0x637a / 0x692e), so a store inside either bank is lost
+ * after an OTA install. Stock flash use (every erase site traced): banks
+ * 0x0-0x3ffff, settings 0x40000-0x43fff (0x57d0, 0x6d88, 0x66dc, 0x5d7e),
+ * session log ring 0x45000 + (n % 28) * 0x1000 up to 0x60fff (0x573a), SDK
+ * pairing 0x74000 and MAC / calibration 0xff000 / 0xfe000 (.data). 0x61000-
+ * 0x73fff is unused. Code gets 0x14000-0x16fff. */
+#define DEV_RAMP_FLASH      0x70000
 #define DEV_FLASH_READ      0xab8
 #define DEV_FLASH_ERASE     0xa1c
 #define DEV_FLASH_WRITE     0xa5c

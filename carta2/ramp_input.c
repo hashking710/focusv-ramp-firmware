@@ -89,6 +89,11 @@ void ramp_event_entry(void)
     volatile u8 *mb = EVENT_MAILBOX;
     volatile ramp_state_t *st = RAMP_STATE;
 
+    if (ramp_stock_mode()) {   /* every event to stock, untouched */
+        orig_event_consumer();
+        return;
+    }
+
     if (mb[1] && ramp_active(st)) {
         u8 ev = mb[0];
         if ((ev == 2 || ev == 1) && STRUCT_BASE[OFF_LOCKED] == 0) {

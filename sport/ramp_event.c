@@ -18,6 +18,11 @@ void ramp_event_entry(void)
     volatile u8 *mb = EV_MB;
     int ev = mb[0];
 
+    if (ramp_stock_mode()) {   /* every event to stock, untouched */
+        orig_event_consumer();
+        return;
+    }
+
     /* The picker only opens on a device that's fully on: note, at the press
      * (16) -- before the consumer runs it, which is what wakes a device in
      * standby -- whether it was already awake. A hold that began by waking it

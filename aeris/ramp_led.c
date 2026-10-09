@@ -139,7 +139,7 @@ void ramp_led_entry(void)
     volatile ramp_state_t *st = RAMP_STATE;
     u16 pin;
 
-    if (st->magic != RAMP_MAGIC || LED_ENABLED == 0 || LED_RAIL_BLOCK != 0 || stock_animating()) {
+    if (st->magic != RAMP_MAGIC || st->stock_mode || LED_ENABLED == 0 || LED_RAIL_BLOCK != 0 || stock_animating()) {
         stock_led_dispatch();
         return;
     }

@@ -40,12 +40,15 @@ Body:    80,684 bytes (after the 40-byte header), SHA-1 7e3569fabd06...
 | 0x61ae | call to the LED effect dispatcher `0x920c` (the only caller) | `ramp_led_entry`: button light and LEDs while a ramp or the picker owns them, else the stock effects |
 | 0xb066 | stock send of the `0xAA` dab-counter reply (notify `0xe734`) | `ramp_announce_entry`: sends it unchanged, then announces the patch (`0xBC`) |
 
-The code goes at flash 0x14000 and runs at 0x14028, with 8 KB to grow into. The waypoint store has
-its own sector at 0x16000, and the output image ends with it, at 0x17000 (94,212 bytes with the
-trailer) -- well
+The code goes at flash 0x14000 and runs at 0x14028, with 12 KB to grow into, and the output image
+ends at 0x17000 (94,212 bytes with the trailer) -- well
 inside the 124 KB the stock OTA accepts (`main()` calls `bls_ota_set_fwSize_and_fwBootAddr(124,
-0x20000)`). Stock erases only its settings (0x40000-0x43fff), the SDK's pairing area and the
-other OTA bank, so nothing stock touches 0x14000-0x16fff while it runs from bank 0.
+0x20000)`).
+
+The ramp store has its own sector at 0x70000, outside both OTA banks. Stock erases the bank it
+isn't running from at every boot, so a store inside the image would be lost after an OTA install
+(the image then runs from bank 1). Every stock erase site is traced in [`device.h`](device.h):
+nothing stock touches 0x61000-0x73fff.
 
 ## Preset picker and on/off
 

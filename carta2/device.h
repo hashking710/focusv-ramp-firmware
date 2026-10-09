@@ -82,14 +82,19 @@
  * Unlocked, on the idle live view (screen 1, no session), stock uses: + / -
  * short or held (editors, 0x61c8 / 0x610a), double click (start), triple click
  * (menu, 0x5da2), long hold (preset cycle, 0x61f6), four clicks (lock), four
- * clicks + hold (low power), five clicks (power). A single click (and the
- * press event before it) does nothing: 0x5708 -> 0x571e -> 0x5728 -> return.
- * That click opens the picker. Locked, nothing opens it -- the lock stands. */
+ * clicks + hold (low power), five clicks (power). A single click wakes the
+ * screen from the screensaver back to the main view (seen on the device; the
+ * consumer path 0x5708 -> 0x571e -> 0x5728 -> return doesn't show it, so the
+ * wake happens elsewhere). Every gesture is taken, so the picker is DISABLED
+ * on the Carta 2: DEV_PICK_ENTER is a code no event has, and nothing opens it.
+ * Ramps still start from the app or a sentinel slot, using the stored preset
+ * choice (Balanced until one is set). The rest of the picker code is kept for
+ * a future entry that doesn't shadow a stock gesture. */
 #define OFF_LOCKED          0x82
 #define SCREEN_LIVE         1
 #define DEV_PICKER_SCREEN() (STRUCT_BASE[OFF_SCREEN] == SCREEN_LIVE && STRUCT_BASE[OFF_LOCKED] == 0)
 #define DEV_PICK_COUNT      6
-#define DEV_PICK_ENTER      7      /* single click: a no-op there in stock */
+#define DEV_PICK_ENTER      (-2)   /* disabled: no free gesture (see above) */
 #define DEV_PICK_NEXT       2
 #define DEV_PICK_PREV       1
 #define DEV_PICK_EXIT       7

@@ -54,7 +54,7 @@ WAYPOINT_SECTOR = 0x32000
 IMAGE_END_ADDR = 0x33000
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_carta2_v1.bin"   # built locally, never published
-BLOB_SHA256 = "b7acfa27c5c73a88554add114a5f784e6b4c0dc2cb62d281362e8ce1265ccdd8"   # written by tools/build.py
+BLOB_SHA256 = "e3be5a1e9de886e4e0198fdc898024bd1462ace2dc13a5da34efbcf91b2e34be"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock
@@ -93,7 +93,7 @@ PATCHES = [
     (0xFA58, bytes.fromhex("fe97529c"), bytes.fromhex("2190749e")),  # tjl 0xe300 -> ramp_e300_hide
     (0xFA60, bytes.fromhex("fe97289c"), bytes.fromhex("21907c9e")),  # tjl 0xe2b4 -> ramp_e2b4_hide
     (0x11562, bytes.fromhex("0490679a"), bytes.fromhex("1f90819a")),  # tjl 0x15a34 -> ramp_announce_entry
-    (0x11D96, bytes.fromhex("28a3eb1c"), bytes.fromhex("1f90a39d")),  # tmovs r3, #40 -> ramp_marker_entry
+    (0x11D96, bytes.fromhex("28a3eb1c"), bytes.fromhex("1f909d9d")),  # tmovs r3, #40 -> ramp_marker_entry
 ]
 
 

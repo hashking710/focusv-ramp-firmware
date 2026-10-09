@@ -10,6 +10,9 @@
 > behaves. Flash only a device you can recover over SWire (see focusv-ble-research's
 > [hardware guide](https://github.com/hashking710/focusv-ble-research/blob/master/docs/hardware-setup.md)),
 > and keep your original firmware file. Bench-test reports are the most useful contribution right now.
+> **Not release-ready:** [`VERIFICATION.md`](VERIFICATION.md) lists every behaviour the patches rely
+> on and whether it's traced in the stock code, carried over from an earlier pass, open, or
+> hardware-only. Nothing ships until every row is traced or hardware-confirmed.
 
 Independent, hobbyist firmware patches that add an autonomous temperature ramp to Focus V's
 Carta 2, Aeris and Carta Sport. You build a ramp in [Terpline](https://terpline.app) and upload
@@ -25,12 +28,12 @@ by, or sponsored by Focus V.
 - **Ramps from Terpline or the device.** Terpline uploads up to 5 stages per mode (flower /
   concentrate), each a temperature plus a hold time, stored in their own flash sector. The device
   also ships six built-in concentrate ramps (the same profiles as Terpline's presets).
-- **Choosing a built-in ramp, and on/off, on the device.** A hold from idle opens a picker (Carta 2:
-  a single click on the idle screen, unlocked; Aeris and Sport: a single-press hold, LEDs on). Carta 2: + / − step through six presets, double click switches the ramp system on or off,
-  click leaves. Aeris and Sport: single clicks step through four presets, shown in colour on the
-  button light and the LEDs, triple click switches on or off, hold leaves. During a ramp the button
-  light shows the temperature colour. The choice and the on/off state are kept in flash. Outside the
-  picker, every stock gesture behaves as before.
+- **Choosing a built-in ramp, and on/off, on the device (Aeris and Sport).** A hold from idle (a
+  single press, LEDs on) opens a picker: single clicks step through four presets, shown in colour
+  on the button light and the LEDs, triple click switches the ramp system on or off, hold leaves.
+  During a ramp the button light shows the temperature colour. The choice and the on/off state are
+  kept in flash. Outside the picker, every stock gesture behaves as before. The Carta 2 has no
+  picker: every button gesture on its idle screen already has a stock meaning.
 - **Starting a ramp** is an ordinary session started at a sentinel temperature (150 °F). If
   usable stages are saved for the attached atomizer's mode, the device runs them. Otherwise, in
   concentrate mode, it runs the selected built-in preset, and in flower mode it's a normal stock

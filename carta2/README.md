@@ -69,9 +69,11 @@ draw (w+1) x (h+1) pixels, opaquely.
 
 The patch hooks the only call to the stock button-event consumer (0x5618):
 
-- **main button, single click:** stop, at any stage, through the stock heating screen's own stop path
-  (screen 1, handler `0x5708` -> `0x97f0`). An earlier version forced screen 5 instead -- from a
-  screen table read 0x28 bytes late -- which is the edit screen, so a click didn't stop the ramp.
+- **main button, single click:** passed to stock untouched, exactly as in a stock session. On the
+  heating screen it stops the ramp (screen 1, handler `0x5708` -> `0x97f0`); on the screensaver it
+  brings the ramp screen back. Earlier versions forced the screen first (to 5, the edit screen,
+  from a screen table read 0x28 bytes late; then to 1), which would have turned the screensaver's
+  wake click into a stop.
 - **+ / − short press:** next / previous stage
 - **+ / − held, double click:** ignored. Auto-repeat would skip every stage, and the stock +10 s
   would rewind the ramp clock.
@@ -80,37 +82,20 @@ Outside a ramp, every event goes to the stock consumer unchanged.
 
 ## Preset picker and on/off
 
-With no session and the device unlocked, **single-click** on the idle live view to open the picker.
-A box over the stock target line shows the selected preset's number and a row of six markers.
-Inside it:
+**Not on the Carta 2 (disabled).** Every button gesture on the idle screen already has a stock
+meaning: a single click wakes the screen from the screensaver, + / − short or held open the
+temperature / time editors, a double click starts a session, a triple click opens a menu, a long
+hold cycles the presets, four clicks lock the device (`+0x82`, the app's "Device Locked"), four
+clicks + hold toggle low power, five clicks power off. A picker would have to shadow one of them, so
+it never opens (`DEV_PICK_ENTER` is a code no event has) and every button event outside a ramp goes
+to the stock consumer untouched. Ramps still start from Terpline or a 150 °F trigger slot, using the
+stored preset choice (Balanced until one is set). The picker code stays for a future entry that
+doesn't shadow a stock gesture -- for example a selection sent from Terpline.
 
-- **+ / −**: next / previous built-in preset;
-- **double click**: switch the ramp system on or off -- with it off, the number and the selected
-  marker turn orange;
-- **click**: leave, saving the choice in flash. The stock live view is redrawn.
-
-**Why a single click.** On the unlocked idle live view (screen 1), stock already uses every other
-gesture: + / − short or held open the temperature / time editors, a double click starts a session,
-a triple click opens a menu, a long hold cycles the presets, four clicks lock the device, four
-clicks + hold toggle low power, five clicks power off. A single click does nothing there
-(`0x5708` -> `0x571e` -> `0x5728` -> return), so it's the one gesture the picker can take without
-shadowing a stock one.
-
-**Device lock.** Four clicks lock the Carta 2 (`+0x82`; the official app reads it as "Device
-Locked", byte 16 of the `0x99` status packet). While it's locked, the picker doesn't open.
-
-Screens, from the stock consumer's table (pointer `0x1a3c0` is a runtime address; the table is at
-disassembly `0x1a398`): 0 off / asleep, 1 the live view (idle, and the heating screen in a session),
-4 / 12 only while locked, 5-9 editors and menus. Two earlier versions got this wrong: one treated
-screen 0 as idle (from that table read 0x28 bytes late), so the picker could only open while the
-screen was off; the next opened it from the lock screens, so it only worked while locked.
-
-The box is redrawn on every change, from the event hook, and again whenever stock redraws the live
-view. Events the picker takes reach the stock consumer as one the live view ignores, so they still
-count as activity for auto-off. The picker opens even when the ramp system is off, so it can be
-switched back on; while off, no ramp arms and no stage or offset is saved. It closes, passing the
-event on, as soon as the screen leaves the idle live view. Five clicks (power on / off) and the
-app's start / stop / +10 s always reach the stock code.
+Earlier versions got the entry wrong three times: screen 0 (off / asleep, from the stock screen
+table read 0x28 bytes late -- the pointer `0x1a3c0` is a runtime address, the table is at
+`0x1a398`), then the lock screens (4 / 12), then a single click on the live view (which wakes the
+screen from the screensaver).
 
 The earlier on/off gesture, + and − held together, is gone: it counted any − press followed by any +
 press, so stepping through presets could switch the system off.

@@ -7,16 +7,18 @@
  * 8 = double click (stock: +10 s).
  *
  * While a ramp is active (everything else is stock):
- *   single click -> stop. Screen is forced to 1, the heating screen every
- *                   stock session start sets (0x5a9e and the other starts):
- *                   its handler 0x5708 runs the stop routine 0x97f0 on event
- *                   7 or 17 while +0x1 (session) is 1. The consumer's screen
- *                   table pointer 0x1a3c0 is a runtime address -- the table
- *                   is at disassembly 0x1a398 (entries 4 and 14 both point
- *                   at 0x5740, which tests for exactly those two screens).
- *                   Read 0x28 bytes late it looks as if screen 5 stops and
- *                   screen 1 returns; screen 5 is really the edit screen
- *                   (0x57aa), where a click doesn't stop anything.
+ *   single click -> passed to stock untouched, exactly as in a stock session.
+ *                   A ramp is a stock session started on screen 1 (every
+ *                   start sets it: 0x5a9e and the others) and nothing here
+ *                   changes the screen, so on the heating screen the click
+ *                   stops (handler 0x5708 -> stop 0x97f0 while +0x1 is 1),
+ *                   and on the screensaver it does whatever stock does there
+ *                   (it brings the main screen back -- seen on the device).
+ *                   An earlier version forced screen 1 / 5 first; forcing
+ *                   would turn that wake click into a stop. (The consumer's
+ *                   screen table pointer 0x1a3c0 is a runtime address: the
+ *                   table is at disassembly 0x1a398 -- entries 4 and 14 both
+ *                   point at 0x5740, which tests for exactly those screens.)
  *   + / - short  -> next / previous stage
  *   + / - held   -> ignored (auto-repeat would skip every stage)
  *   double click -> ignored (stock +10 s would rewind the ramp clock)
@@ -38,8 +40,6 @@
 
 #define EVENT_MAILBOX        ((volatile u8 *)0x84319c)
 #define orig_event_consumer  STOCK_FN(void_fn, 0x5618)
-
-#define SCREEN_HEATING 1
 
 /* Events the picker never takes: 11 is power on / off (five clicks, and the
  * firmware's own request at 0xfee8); 16 / 17 / 18 are the app's A5 / AF / 66
@@ -85,8 +85,6 @@ void ramp_event_entry(void)
             mb[1] = 0;
             return;
         }
-        if (ev == 7)
-            STRUCT_BASE[OFF_SCREEN] = SCREEN_HEATING;
     }
 
     if (mb[1]) {

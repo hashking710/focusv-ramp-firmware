@@ -197,7 +197,7 @@ static void ramp_tick(void)
 
     /* A session that starts while the picker is open belongs to the stock
      * code: close the picker, unsaved choice included. The button light is
-     * handed back by ramp_led_update on the same tick. */
+     * handed back by the device's ramp_led.c on its next pass. */
     if (STRUCT_BASE[OFF_SESSION] != 0) {
         st->picker_on = 0;
         st->picker_dirty = 0;

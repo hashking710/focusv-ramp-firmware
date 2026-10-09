@@ -48,24 +48,28 @@ LENGTH_FIELD_OFFSET = 24
 
 # Flash layout (physical address = file offset). The blob goes at file offset
 # HEADER_LEN + CODE_INJECT_ADDR, so it runs at CODE_INJECT_ADDR + 0x28, where
-# tools/build.py links it; the waypoint store has its own sector after it.
+# tools/build.py links it; the waypoint store has its own sector after it, and
+# the image ends with that sector. The stock OTA accepts at most 124 KB (main()
+# calls bls_ota_set_fwSize_and_fwBootAddr(124, 0x20000); the OTA start rejects
+# a larger header length), so the image must stay under OTA_MAX_IMAGE.
 CODE_INJECT_ADDR = 0x18000
 WAYPOINT_SECTOR = 0x19000
-IMAGE_END_ADDR = 0x20000
+IMAGE_END_ADDR = 0x1A000
+OTA_MAX_IMAGE = 124 << 10
 
 CODE_BLOB_PATH = SCRIPT_DIR / "ramp_firmware_sport_v1.bin"   # built locally, never published
-BLOB_SHA256 = "febaa99c2c3372d0db75e921cf7a02908306d179c780fb993840899fe4e1dd01"   # written by tools/build.py
+BLOB_SHA256 = "b886eb3b1535f6c5e019fa7e83f638391b3efa0257c266269d8885801ba595cb"   # written by tools/build.py
 
 # (address in the header-stripped body, expected stock bytes, replacement).
 # Written by tools/build.py: each original decodes to the named stock
 # instruction; each replacement is the real assembler's `tjl` to the named
 # function in the blob above.
 PATCHES = [
-    (0x57EE, bytes.fromhex("0390039c"), bytes.fromhex("1390db9a")),  # tjl 0x8ff8 -> ramp_btn_entry
-    (0x58A8, bytes.fromhex("fe97909e"), bytes.fromhex("1390d09a")),  # tjl 0x45cc -> ramp_event_entry
+    (0x57EE, bytes.fromhex("0390039c"), bytes.fromhex("1390c799")),  # tjl 0x8ff8 -> ramp_led_entry
+    (0x58A8, bytes.fromhex("fe97909e"), bytes.fromhex("1390c69a")),  # tjl 0x45cc -> ramp_event_entry
     (0x58B0, bytes.fromhex("0290a699"), bytes.fromhex("1290419c")),  # tjl 0x7c00 -> ramp_trampoline
     (0xA9EA, bytes.fromhex("04902799"), bytes.fromhex("0e903398")),  # tjl 0xec3c -> ramp_announce_entry
-    (0xB002, bytes.fromhex("35a3fb1c"), bytes.fromhex("0d90659f")),  # tmovs r3, #53 -> ramp_marker_entry
+    (0xB002, bytes.fromhex("35a3fb1c"), bytes.fromhex("0d90679f")),  # tmovs r3, #53 -> ramp_marker_entry
 ]
 
 
@@ -133,6 +137,8 @@ def main() -> int:
     struct.pack_into("<I", header, LENGTH_FIELD_OFFSET, HEADER_LEN + len(body) + 4)
     payload = bytes(header) + bytes(body)
     final_image = payload + struct.pack("<I", telink_crc32(payload))
+    if len(final_image) > OTA_MAX_IMAGE:
+        return fail(f"the image ({len(final_image)} bytes) is larger than the stock OTA accepts ({OTA_MAX_IMAGE})")
 
     args.output.write_bytes(final_image)
     print(f"wrote {args.output} ({len(final_image)} bytes)")

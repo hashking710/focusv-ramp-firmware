@@ -36,11 +36,15 @@ BASE = 0x28   # code runs at disassembly address + 0x28 (the header sits at flas
 
 # sites: (address, wrapper, expected stock instruction)
 # hook_all: (stock target, wrapper, expected number of callers) -- every caller is patched
+# ota_max: the image size the stock OTA accepts (each main() sets it with the
+#   SDK's bls_ota_set_fwSize_and_fwBootAddr: Carta 2 248 KB / bank 0x40000,
+#   Aeris and Sport 124 KB / bank 0x20000; the OTA start rejects a header
+#   length above it)
 DEVICES = {
     'carta2': dict(
         src=['common/ramp_core.c', 'common/ramp_store.c', 'common/ramp_picker.c', 'common/ramp_presets.c', 'common/ramp_announce.c', 'carta2/ramp_display.c', 'carta2/ramp_input.c'],
         asm=['carta2/ramp_marker_entry.s'],
-        inject=0x30000, wp=0x32000, end=0x33000,
+        inject=0x30000, wp=0x32000, end=0x33000, ota_max=248 << 10,
         sites=[(0x6e2e, 'ramp_trampoline', 'tjl 0xaf2c'),
                (0x11d96, 'ramp_marker_entry', 'tmovs r3, #40'),
                (0x6d0c, 'ramp_event_entry', 'tjl 0x5618'),
@@ -63,7 +67,7 @@ DEVICES = {
     'aeris': dict(
         src=['common/ramp_core.c', 'common/ramp_store.c', 'common/ramp_picker.c', 'common/ramp_presets.c', 'common/ramp_announce.c', 'aeris/ramp_led.c', 'aeris/ramp_event.c'],
         asm=['aeris/ramp_marker_entry.s'],
-        inject=0x14000, wp=0x15000, end=0x16000,
+        inject=0x14000, wp=0x15000, end=0x16000, ota_max=124 << 10,
         sites=[(0x6464, 'ramp_trampoline', 'tjl 0x8154'),
                (0xb490, 'ramp_marker_entry', 'tmovs r3, #53'),
                (0x645c, 'ramp_event_entry', 'tjl 0x4ee8'),
@@ -74,11 +78,11 @@ DEVICES = {
     'sport': dict(
         src=['common/ramp_core.c', 'common/ramp_store.c', 'common/ramp_picker.c', 'common/ramp_presets.c', 'common/ramp_announce.c', 'sport/ramp_led.c', 'sport/ramp_event.c'],
         asm=['sport/ramp_marker_entry.s'],
-        inject=0x18000, wp=0x19000, end=0x20000,
+        inject=0x18000, wp=0x19000, end=0x1a000, ota_max=124 << 10,
         sites=[(0x58b0, 'ramp_trampoline', 'tjl 0x7c00'),
                (0xb002, 'ramp_marker_entry', 'tmovs r3, #53'),
                (0x58a8, 'ramp_event_entry', 'tjl 0x45cc'),
-               (0x57ee, 'ramp_btn_entry', 'tjl 0x8ff8'),
+               (0x57ee, 'ramp_led_entry', 'tjl 0x8ff8'),
                (0xa9ea, 'ramp_announce_entry', 'tjl 0xec3c')],
         hook_all=[],
         own_callers={'0x7c00': 1, '0x45cc': 1, '0x8ff8': 1}),
@@ -249,6 +253,7 @@ def main():
         check(struct.unpack('<I', out[-4:])[0] == crc32_telink(out[:-4]), 'Telink CRC32 trailer correct')
         check(out[8:12] == b'KNLT' and out[:24] == stock[:24], 'header intact')
         check(len(out) == D['end'] + 4, f'image covers exactly flash 0..{D["end"]:#x} (+ trailer): no sector past it is touched')
+        check(len(out) <= D['ota_max'], f'image ({len(out):#x} bytes) within the stock OTA size limit ({D["ota_max"]:#x}): the stock OTA rejects anything larger')
 
         print(f'== {a.device}: independent decode ==')
         # The checks above decode each site with tjl_lands(); this re-reads the

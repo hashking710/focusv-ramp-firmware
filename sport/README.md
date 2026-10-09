@@ -14,8 +14,8 @@ Sport's 5 RGB LEDs, the same way as the Aeris:
 - **Their colour** is the measured temperature, on this ramp's own scale.
 
 LEDs follow the user's LED setting (0x842694 + 15, 0 = off), which the patch reads and never
-writes. The stock push routine `0x8cf8` clears the buffer to black when that setting is off, then
-scales it by the user's brightness itself.
+writes: with it off, the stock effects keep both lights. The stock push routine `0x8cf8` applies
+dim mode (four presses + hold) and low battery itself.
 
 **Stopping:** a single click during a session already stops it in stock firmware. In the event
 consumer at 0x45cc, event 11 stops unconditionally, and events 7, 15 and 19 stop while heating.
@@ -38,16 +38,22 @@ Body:    90,860 bytes (after the 40-byte header), SHA-1 4b57f086a175...
 | 0x58b0 | call to orchestrator `0x7c00` (the only caller) | `ramp_trampoline`: stock tick, the ramp, then the LEDs |
 | 0xb002 | marker-byte load before the A5/AF/66 chain | `ramp_marker_entry`: waypoint upload markers |
 | 0x58a8 | call to button-event consumer `0x45cc` (the only caller) | `ramp_event_entry`: the preset picker, then the stock consumer |
-| 0x57ee | call to the LED effect dispatcher `0x8ff8` (the only caller) | `ramp_btn_entry`: button light and LEDs while a ramp or the picker owns them, else the stock effects |
+| 0x57ee | call to the LED effect dispatcher `0x8ff8` (the only caller) | `ramp_led_entry`: button light and LEDs while a ramp or the picker owns them, else the stock effects |
 | 0xa9ea | stock send of the `0xAA` dab-counter reply (notify `0xec3c`) | `ramp_announce_entry`: sends it unchanged, then announces the patch (`0xBC`) |
 
 The code goes at flash 0x18000 and runs at 0x18028. The waypoint store has its own sector at
-0x19000. The output image ends at 0x20000. An earlier version put the waypoint store at 0x18000,
-the same address as its own code, so the first save would have erased the patch.
+0x19000, and the output image ends with it, at 0x1a000 (106,500 bytes with the trailer). The stock
+OTA accepts at most 124 KB: `main()` calls the SDK's `bls_ota_set_fwSize_and_fwBootAddr(124,
+0x20000)`, and the OTA start rejects a larger header length. An earlier version ended the image at
+0x20000 (128 KB + 4), which the stock OTA would have refused. An earlier version still put the
+waypoint store at 0x18000, the same address as its own code, so the first save would have erased
+the patch.
 
 ## Preset picker and on/off
 
-From the idle state (no session), **hold the button** to open the picker. Inside it:
+From the idle state (no session), **hold the button** (a single press, held about 2 s) to open the
+picker. A hold that ends a multi-press gesture (two presses + hold, four presses + hold for dim mode,
+seven presses + hold) stays the stock gesture. Inside it:
 
 - **single click**: next built-in preset (Flavor first, Rosin, Balanced, Sauce; Balanced by default).
   The **button light** shows the preset's colour (cyan, green, amber, magenta), and the LEDs light up
@@ -58,8 +64,10 @@ From the idle state (no session), **hold the button** to open the picker. Inside
 
 The picker opens even when the system is off, so it can be switched back on. While the system is
 off, no ramp arms and no stage or offset is saved. The picker closes, passing the event on, as soon
-as the device leaves the idle state (sleep, a session). Its events never reach the stock handler,
-so the stock gestures are unchanged outside it: a click cycles the temperature preset, a triple
+as the device leaves the idle state (sleep, a session), and the app's start / stop / +10 s commands
+always reach the stock code. The events it takes reach the stock handler only as a plain press,
+which still counts as activity for the auto-off timer, so the stock gestures are unchanged outside
+it: a click cycles the temperature preset, a triple
 click cycles the LED preset, four clicks show the battery. In the idle state a stock hold does
 nothing (it only stops a running session), so the picker's hold doesn't shadow a stock gesture.
 
@@ -69,11 +77,17 @@ picker still works but shows nothing.
 
 **The button light.** During a ramp it shows the same temperature colour as the LEDs (blue at
 the coolest stage through to gold at the hottest); in the picker, the preset's colour, or red when the
-system is off. It's one more addressable RGB LED, sent by `0x8efc` from `0x844b12`/`0x844b0c`/`0x844b0e` (red, green, blue). The patch fills those, scaled by the brightness byte (`0x844b3d`), and sends them with `0x8efc`. The stock LED effect dispatcher (`0x8ff8`, one caller at `0x57ee`, top of the
-main loop) normally sets both lights; the patch wraps that call, and while a ramp or the picker owns
-the lights it sets them itself instead of running the stock effects. Otherwise the dispatcher runs
-unchanged, which also restores the stock colour. Both lights follow the LED setting: with LEDs off,
-the stock effects keep both.
+system is off. It's one more addressable RGB LED, sent by `0x8efc` from `0x844b12`/`0x844b0c`/`0x844b0e`
+(red, green, blue). The button and the ring share one PWM output and one DMA buffer, so every stock
+push runs button (`0x8efc`, which waits for its own transfer), LED rail PA0 on, ring (`0x8cf8`, which
+doesn't wait) -- and so does the patch, from one place: the call of the stock LED effect dispatcher
+(`0x8ff8`, one caller at `0x57ee`, every 10 ms main-loop tick). While a ramp or the picker owns the
+lights, it fills and pushes both instead of running the stock effects; otherwise the dispatcher
+runs unchanged, which also restores the stock colours. A stock cue (the three blinks at session
+start, a fade) always plays out first: the dispatcher's animation state at `0x844b3c` (+1 level,
++5 blinks, +6 fade-in, +7 fade-out) must be idle at level 100 before the patch draws, so it never
+freezes the level mid-blink. Both lights follow the LED setting: with LEDs off, the stock effects
+keep both.
 
 ## Device-specific behaviour, confirmed from the code that uses it
 
@@ -95,5 +109,8 @@ the stock effects keep both.
 
 Every address in [`device.h`](device.h) is listed with the stock code that proves what it means.
 
-**Not verifiable from the firmware file:** that nothing else on the device uses flash
-0x18000–0x19fff, which lies past the end of the stock image. Only a hardware test confirms it.
+**Flash use, from every stock erase call:** settings at 0x40000–0x43fff, pairing at 0x74000+, and
+the OTA writes the other bank (0x20000 or 0) -- nothing stock touches 0x18000–0x19fff. The store
+address is physical: running from bank 0 it is the image's own erased sector; after an OTA that
+lands in bank 1 (0x20000) it is that sector of the now-inactive bank 0, which the next OTA erases.
+Either way a ramp starts from a fresh or an older store, both checked before use.

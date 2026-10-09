@@ -83,7 +83,21 @@
 /* Button events (consumer 0x45cc, mailbox 0x844b30, UI state 0x842694+3 = 1
  * on the awake screen). A hold from idle opens the preset picker; single clicks
  * step through the four presets, a triple click switches the ramp system on or
- * off, and a hold leaves it. */
+ * off, and a hold leaves it.
+ *
+ * The button scanner (0x8868) posts 16 on every press and 15 once a press is
+ * held 200 scans; on release it posts 7..11 for 1..5+ presses, and a long
+ * press posts no click. Presses of the current gesture count at 0x842694+0x20,
+ * so a hold that ends a multi-press gesture -- 2 presses + hold (13), 4 presses
+ * + hold (12: dim mode), 7 presses + hold (14) -- posts its 15 with a count
+ * above 1: only a hold from a single press opens the picker. The 0xCC handler
+ * posts 18 / 19 / 20 for the app's A5 / AF / 66 markers (start, stop, +10 s). */
+#define DEV_EV_CLICKS()     (*(volatile u8 *)(0x842694 + 0x20))
+#define DEV_EV_APP_MIN      18
+/* The consumer's prelude, run for every pending event, resets the idle
+ * auto-off timer (+0x42) and refreshes 0x842910+0x20. Events the picker takes
+ * are handed on as 16 (a press), which state 1 ignores, so that still runs. */
+#define DEV_EV_NOOP         16
 #define DEV_EV_MB           0x844b30
 #define DEV_EV_CONSUMER     0x45cc
 #define DEV_UI_STATE_ADDR   0x842697
@@ -99,7 +113,7 @@
 #define DEV_IDLE()          ((*(volatile u8 *)DEV_UI_STATE_ADDR) == 1 && STRUCT_BASE[OFF_SESSION] == 0)
 
 
-void ramp_led_update(void);
-#define DEV_AFTER_TICK(st)  ramp_led_update()
+void ramp_led_tick(void);
+#define DEV_AFTER_TICK(st)  ramp_led_tick()
 
 #endif
